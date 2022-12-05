@@ -34,7 +34,7 @@ async fn main() -> eyre::Result<()> {
         .init();
 
     tracing::info!("Loading configuration");
-    let configuration = toml::from_str::<Configuration>(&*tokio::fs::read_to_string("configuration.toml").await?)?;
+    let configuration = toml::from_str::<Configuration>(&tokio::fs::read_to_string("configuration.toml").await?)?;
 
     tracing::info!("Creating registry directories");
     tokio::fs::create_dir_all(&configuration.registry_storage).await?;
