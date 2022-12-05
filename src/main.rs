@@ -1,11 +1,13 @@
 mod configuration;
 mod controllers;
 mod requests;
+mod data;
 
 use std::net::SocketAddr;
 use std::str::FromStr;
 use std::sync::Arc;
 use axum::Router;
+use axum::extract::FromRef;
 use axum::routing::{get, post};
 use axum::ServiceExt;
 use tower::Layer;
@@ -13,6 +15,13 @@ use tower_http::trace::TraceLayer;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use crate::configuration::Configuration;
+use crate::data::incomplete_upload::UploadInProgressStore;
+
+#[derive(FromRef, Clone)]
+pub struct ApplicationState {
+    configuration: Arc<Configuration>,
+    uploads: Arc<UploadInProgressStore>
+}
 
 #[tokio::main]
 async fn main() -> eyre::Result<()> {
@@ -26,20 +35,22 @@ async fn main() -> eyre::Result<()> {
 
     tracing::info!("Loading configuration");
     let configuration = toml::from_str::<Configuration>(&*tokio::fs::read_to_string("configuration.toml").await?)?;
-    let configuration = Arc::new(configuration);
 
     tracing::info!("Creating registry directories");
     tokio::fs::create_dir_all(&configuration.registry_storage).await?;
 
-    let url_rewrite_layer = axum::middleware::from_fn(requests::rewrite_container_part_url);
+    let application_state = ApplicationState {
+        configuration: Arc::new(configuration),
+        uploads: Arc::new(UploadInProgressStore::new())
+    };
 
     let app = Router::new()
         .route("/", get(controllers::base::root))
         .route("/v2/", get(controllers::base::registry_base))
         .route("/v2/:containerRef/blobs/uploads", post(controllers::blobs::initiate_upload))
-        .with_state(configuration)
+        .with_state(application_state)
         /*
-        Routes remaining
+        Routes remaining/http/0.2.8/http/request/struct.Request.html
         Get an image
         GET /v2/<name>/manifests/<reference>
         GET /v2/<name>/blobs/<digest>
@@ -52,6 +63,7 @@ async fn main() -> eyre::Result<()> {
          */
         .layer(TraceLayer::new_for_http());
 
+    let url_rewrite_layer = axum::middleware::from_fn(requests::rewrite_container_part_url);
     let app_with_rewrite = url_rewrite_layer.layer(app);
 
     let addr = SocketAddr::from_str("127.0.0.1:8000").unwrap();
