@@ -10,7 +10,7 @@ const REPLACE_REGEX: Lazy<Regex> = Lazy::new(|| {
 pub async fn rewrite_container_part_url<B>(mut req: Request<B>, next: Next<B>) -> Response {
     let uri = req.uri_mut();
 
-    *uri = REPLACE_REGEX.replace(uri.path(), |captures: &Captures| {
+    *uri = REPLACE_REGEX.replace(&*uri.to_string(), |captures: &Captures| {
         println!("{:?}", captures);
 
         format!(
