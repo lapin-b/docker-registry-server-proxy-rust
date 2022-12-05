@@ -1,11 +1,14 @@
-mod controllers;
 mod configuration;
+mod controllers;
+mod requests;
 
 use std::net::SocketAddr;
 use std::str::FromStr;
 use std::sync::Arc;
 use axum::Router;
 use axum::routing::{get, post};
+use axum::ServiceExt;
+use tower::Layer;
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
@@ -28,9 +31,12 @@ async fn main() -> eyre::Result<()> {
     tracing::info!("Creating registry directories");
     tokio::fs::create_dir_all(&configuration.registry_storage).await?;
 
+    let url_rewrite_layer = axum::middleware::from_fn(requests::rewrite_container_part_url);
+
     let app = Router::new()
         .route("/", get(controllers::base::root))
         .route("/v2/", get(controllers::base::registry_base))
+        .route("/v2/:containerRef/blobs/uploads", post(controllers::blobs::initiate_upload))
         .with_state(configuration)
         /*
         Routes remaining
@@ -46,10 +52,12 @@ async fn main() -> eyre::Result<()> {
          */
         .layer(TraceLayer::new_for_http());
 
+    let app_with_rewrite = url_rewrite_layer.layer(app);
+
     let addr = SocketAddr::from_str("127.0.0.1:8000").unwrap();
     println!("Listen port 8000");
     axum::Server::bind(&addr)
-        .serve(app.into_make_service())
+        .serve(app_with_rewrite.into_make_service())
         .await?;
 
     Ok(())
