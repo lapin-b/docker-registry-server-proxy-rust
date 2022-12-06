@@ -15,7 +15,7 @@ pub struct UploadInProgress {
 impl UploadInProgress {
     pub fn new(container_reference: &str, registry_root: &PathBuf) -> Self {
         let id = Uuid::new_v4();
-        let temporary_file = registry_root.join(format!("uploads/blobs/{}", id));
+        let temporary_file = registry_root.join(format!("blobs/{}", id));
 
         Self {
             id: Uuid::new_v4(),

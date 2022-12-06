@@ -1,5 +1,3 @@
-use std::borrow::Cow;
-
 use axum::{http::StatusCode, extract::{Path, State}, response::IntoResponse};
 use eyre::ContextCompat;
 
@@ -14,7 +12,7 @@ pub async fn initiate_upload(
     reject_invalid_container_names(&container_ref)?;
 
     let mut uploads = application.uploads.write().await;
-    let upload = UploadInProgress::new(&container_ref, &application.configuration.registry_storage);
+    let upload = UploadInProgress::new(&container_ref, &application.configuration.temporary_registry_storage);
     let upload_id = upload.id;
     tracing::info!("Initiating upload for [{}] blob {}", container_ref, upload_id);
     uploads.insert(upload_id, upload);

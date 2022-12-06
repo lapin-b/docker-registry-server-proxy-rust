@@ -41,6 +41,7 @@ async fn main() -> eyre::Result<()> {
 
     tracing::info!("Creating registry directories");
     tokio::fs::create_dir_all(&configuration.registry_storage).await?;
+    tokio::fs::create_dir_all(&configuration.temporary_registry_storage).await?;
 
     let application_state = ApplicationState {
         configuration: Arc::new(configuration),
