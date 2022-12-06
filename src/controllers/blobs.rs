@@ -8,7 +8,7 @@ use tokio::io::{AsyncSeekExt, AsyncWriteExt};
 use tracing::info;
 
 
-use crate::{data::helpers::{reject_invalid_container_names, RegistryPathsHelper}, ApplicationState};
+use crate::{data::helpers::{reject_invalid_refrence_names, RegistryPathsHelper}, ApplicationState};
 use crate::controllers::RegistryHttpResult;
 
 use super::RegistryHttpError;
@@ -24,7 +24,7 @@ pub async fn initiate_upload(
     State(application): State<ApplicationState>,
     query_string: Option<Query<DigestQueryString>>
 ) -> RegistryHttpResult {
-    reject_invalid_container_names(&container_ref)?;
+    reject_invalid_refrence_names(&container_ref)?;
 
     if query_string.is_some() {
         return Ok((StatusCode::NOT_IMPLEMENTED).into_response());
@@ -51,7 +51,7 @@ pub async fn check_blob_exists(
     Path((container_ref, digest)): Path<(String, String)>,
     State(app): State<ApplicationState>
 ) -> RegistryHttpResult {
-    reject_invalid_container_names(&container_ref)?;
+    reject_invalid_refrence_names(&container_ref)?;
     let (algo, hash) = digest
         .split_once(':')
         .ok_or_else(|| RegistryHttpError::InvalidHashFormat(Cow::from(digest.clone())))?;

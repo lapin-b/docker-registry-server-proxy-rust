@@ -1,4 +1,4 @@
-use std::{borrow::Cow};
+use std::borrow::Cow;
 
 use axum::{response::{Response, IntoResponse}, Json, http::StatusCode};
 
@@ -6,6 +6,7 @@ use crate::data::json_registry_error::RegistryJsonError;
 
 pub mod base;
 pub mod blobs;
+pub mod manifests;
 
 pub type RegistryHttpResult = Result<Response, RegistryHttpError>;
 
@@ -85,3 +86,4 @@ macro_rules! impl_into_registry_error {
 impl_into_registry_error!(std::io::Error);
 impl_into_registry_error!(eyre::Report);
 impl_into_registry_error!(axum::Error);
+impl_into_registry_error!(tokio::task::JoinError);

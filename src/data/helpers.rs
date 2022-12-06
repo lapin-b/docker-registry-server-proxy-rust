@@ -19,9 +19,23 @@ impl RegistryPathsHelper {
             .join("blobs")
             .join(upload_id.to_string())
     }
+
+    pub fn manifest_path(registry_path: &Path, container_ref: &str, manifest_ref: &str) -> PathBuf {
+        registry_path
+            .join(container_ref)
+            .join("manifests")
+            .join(manifest_ref)
+    }
+
+    pub fn manifest_meta(registry_path: &Path, container_ref: &str, manifest_ref: &str) -> PathBuf {
+        registry_path
+            .join(container_ref)
+            .join("meta")
+            .join(manifest_ref)
+    }
 }
 
-pub fn reject_invalid_container_names(container_ref: &str) -> Result<(), RegistryHttpError> {
+pub fn reject_invalid_refrence_names(container_ref: &str) -> Result<(), RegistryHttpError> {
     if container_ref.contains("..") {
         Err(RegistryHttpError::InvalidName(Cow::Owned(container_ref.to_string())))
     } else if container_ref.is_empty() {
