@@ -1,4 +1,4 @@
-use std::{collections::HashMap, path::PathBuf, time::Instant};
+use std::{collections::HashMap, path::{PathBuf, Path}, time::Instant};
 
 use uuid::Uuid;
 
@@ -13,7 +13,7 @@ pub struct UploadInProgress {
 }
 
 impl UploadInProgress {
-    pub fn new(container_reference: &str, registry_root: &PathBuf) -> Self {
+    pub fn new(container_reference: &str, registry_root: &Path) -> Self {
         let id = Uuid::new_v4();
         let temporary_file = registry_root.join(format!("blobs/{}", id));
 
