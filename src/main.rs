@@ -10,6 +10,7 @@ use axum::Router;
 use axum::extract::FromRef;
 use axum::routing::{get, post};
 use axum::ServiceExt;
+use tokio::sync::RwLock;
 use tower::Layer;
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::layer::SubscriberExt;
@@ -17,10 +18,12 @@ use tracing_subscriber::util::SubscriberInitExt;
 use crate::configuration::Configuration;
 use crate::data::incomplete_upload::UploadInProgressStore;
 
+pub type UploadsInProgressState = Arc<RwLock<UploadInProgressStore>>;
+
 #[derive(FromRef, Clone)]
 pub struct ApplicationState {
     configuration: Arc<Configuration>,
-    uploads: Arc<UploadInProgressStore>
+    uploads: UploadsInProgressState
 }
 
 #[tokio::main]
@@ -41,7 +44,7 @@ async fn main() -> eyre::Result<()> {
 
     let application_state = ApplicationState {
         configuration: Arc::new(configuration),
-        uploads: Arc::new(UploadInProgressStore::new())
+        uploads: Arc::new(RwLock::new(UploadInProgressStore::new()))
     };
 
     let app = Router::new()
