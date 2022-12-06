@@ -50,7 +50,7 @@ async fn main() -> eyre::Result<()> {
     let app = Router::new()
         .route("/", get(controllers::base::root))
         .route("/v2/", get(controllers::base::registry_base))
-        .route("/v2/:containerRef/blobs/uploads", post(controllers::blobs::initiate_upload))
+        .route("/v2/:containerRef/blobs/uploads/", post(controllers::blobs::initiate_upload))
         .with_state(application_state)
         /*
         Routes remaining/http/0.2.8/http/request/struct.Request.html

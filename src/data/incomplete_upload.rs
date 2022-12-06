@@ -4,6 +4,7 @@ use uuid::Uuid;
 
 pub type UploadInProgressStore = HashMap<Uuid, UploadInProgress>;
 
+#[derive(Debug)]
 pub struct UploadInProgress {
     pub id: Uuid,
     pub container_reference: String,
@@ -30,5 +31,9 @@ impl UploadInProgress {
             .expect("Expected parent of the file");
 
         tokio::fs::create_dir_all(parent)
+    }
+
+    pub fn http_upload_uri(&self) -> String {
+        format!("/v2/{}/blobs/uploads/{}", self.container_reference, self.id)
     }
 }

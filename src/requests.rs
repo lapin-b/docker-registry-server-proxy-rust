@@ -11,8 +11,6 @@ pub async fn rewrite_container_part_url<B>(mut req: Request<B>, next: Next<B>) -
     let uri = req.uri_mut();
 
     *uri = REPLACE_REGEX.replace(&uri.to_string(), |captures: &Captures| {
-        println!("{:?}", captures);
-
         format!(
             "/v2/{}{}/{}{}",
             captures.name("isProxy").map(|m| m.as_str()).unwrap_or(""),
