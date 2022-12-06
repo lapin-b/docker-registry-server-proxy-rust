@@ -10,20 +10,22 @@ use axum::Router;
 use axum::extract::FromRef;
 use axum::routing::{get, post, head, patch};
 use axum::ServiceExt;
-use tokio::sync::RwLock;
+use data::upload_in_progress::UploadsStoreCommands;
+use tokio::sync::{RwLock, mpsc};
 use tower::Layer;
 use tower_http::trace::TraceLayer;
+use tracing::info;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use crate::configuration::Configuration;
-use crate::data::upload_in_progress::UploadInProgressStore;
+use crate::data::upload_in_progress::UploadsStore;
 
-pub type UploadsInProgressState = Arc<RwLock<UploadInProgressStore>>;
+pub type UploadsInProgressState = Arc<RwLock<UploadsStore>>;
 
 #[derive(FromRef, Clone)]
 pub struct ApplicationState {
     configuration: Arc<Configuration>,
-    uploads: UploadsInProgressState
+    uploads: UploadsStore
 }
 
 #[tokio::main]
@@ -36,16 +38,16 @@ async fn main() -> eyre::Result<()> {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
-    tracing::info!("Loading configuration");
+    info!("Loading configuration");
     let configuration = toml::from_str::<Configuration>(&tokio::fs::read_to_string("configuration.toml").await?)?;
 
-    tracing::info!("Creating registry directories");
+    info!("Creating registry directories");
     tokio::fs::create_dir_all(&configuration.registry_storage).await?;
     tokio::fs::create_dir_all(&configuration.temporary_registry_storage).await?;
 
     let application_state = ApplicationState {
         configuration: Arc::new(configuration),
-        uploads: Arc::new(RwLock::new(UploadInProgressStore::new()))
+        uploads: UploadsStore::new()
     };
 
     let app = Router::new()

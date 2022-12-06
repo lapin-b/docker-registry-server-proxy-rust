@@ -1,24 +1,70 @@
-use std::{collections::HashMap, path::{PathBuf, Path}, time::Instant};
+use std::{collections::HashMap, path::{PathBuf, Path}, time::Instant, sync::Arc};
 
+use tokio::sync::RwLock;
 use uuid::Uuid;
 
-pub type UploadInProgressStore = HashMap<Uuid, UploadInProgress>;
+type UploadStoreItem = Arc<RwLock<Upload>>;
 
 #[derive(Debug)]
-pub struct UploadInProgress {
+pub struct Upload {
     pub id: Uuid,
     pub container_reference: String,
     pub temporary_file: PathBuf,
     pub last_interacted_with: Instant
 }
 
-impl UploadInProgress {
+#[derive(Clone)]
+pub struct UploadsStore {
+    inner: Arc<RwLock<HashMap<Uuid, UploadStoreItem>>>
+}
+
+impl UploadsStore {
+    pub fn new() -> Self {
+        Self {
+            inner: Default::default()
+        }
+    }
+
+    pub async fn create_upload(&self, container_ref: &str, temporary_files_root: &Path) -> UploadStoreItem {
+        let upload = Upload::new(container_ref, temporary_files_root);
+        let id = upload.id;
+
+        let upload = Arc::new(RwLock::new(upload));
+        let mut lock = self.inner.write().await;
+        lock.insert(id, Arc::clone(&upload));
+
+        upload
+    }
+
+    pub async fn fetch_upload(&self, upload: Uuid) -> Option<UploadStoreItem> {
+        let lock = self.inner.read().await;
+
+        lock.get(&upload).cloned()
+    }
+
+    pub async fn fetch_upload_string_uuid(&self, upload: &str) -> Result<Option<UploadStoreItem>, uuid::Error> {
+        let uuid = upload.parse()?;
+        Ok(self.fetch_upload(uuid).await)
+    }
+
+    pub async fn delete_upload(&self, upload: Uuid) {
+        let mut lock = self.inner.write().await;
+        lock.remove(&upload);
+    }
+
+    pub async fn delete_upload_uuid(&self, upload: &str) -> Result<(), uuid::Error> {
+        let uuid = upload.parse()?;
+        Ok(self.delete_upload(uuid).await)
+    }
+}
+
+impl Upload {
     pub fn new(container_reference: &str, registry_root: &Path) -> Self {
         let id = Uuid::new_v4();
         let temporary_file = registry_root.join(format!("blobs/{}", id));
 
         Self {
-            id: Uuid::new_v4(),
+            id,
             container_reference: container_reference.to_string(),
             temporary_file,
             last_interacted_with: Instant::now(),

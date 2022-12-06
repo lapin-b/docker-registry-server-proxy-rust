@@ -8,7 +8,7 @@ use tokio::io::{AsyncSeekExt, BufWriter, AsyncWriteExt};
 use tracing::{info, debug};
 use uuid::Uuid;
 
-use crate::{data::{upload_in_progress::UploadInProgress, helpers::reject_invalid_container_names}, ApplicationState};
+use crate::{data::{helpers::reject_invalid_container_names}, ApplicationState};
 use crate::controllers::RegistryHttpResult;
 
 use super::RegistryHttpError;
@@ -30,16 +30,10 @@ pub async fn initiate_upload(
         return Ok((StatusCode::NOT_IMPLEMENTED).into_response());
     }
 
-    let mut uploads = application.uploads.write().await;
-    let upload = UploadInProgress::new(&container_ref, &application.configuration.temporary_registry_storage);
-    let upload_id = upload.id;
-    info!("Initiating upload for [{}] blob {}", container_ref, upload_id);
-    uploads.insert(upload_id, upload);
-    drop(uploads);
+    let upload_lock = application.uploads.create_upload(&container_ref, &application.configuration.temporary_registry_storage).await;
+    let upload = upload_lock.read().await;
+    info!("Initiating upload for [{}] blob {}", container_ref, upload.id);
 
-    let uploads = application.uploads.read().await;
-    let upload = uploads.get(&upload_id)
-        .context("Upload key that just has been inserted doesn't exist")?;
     upload.create_containing_directory().await?;
 
     Ok((
@@ -47,7 +41,7 @@ pub async fn initiate_upload(
         [
             ("Location", upload.http_upload_uri()),
             ("Range", "0-0".to_string()),
-            ("Docker-Upload-UUID", upload_id.to_string())
+            ("Docker-Upload-UUID", upload.id.to_string())
         ]
     ).into_response())
 }
