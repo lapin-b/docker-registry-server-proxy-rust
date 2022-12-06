@@ -1,4 +1,4 @@
-use std::{borrow::Cow, io, os::unix::prelude::MetadataExt};
+use std::{borrow::Cow, io::{self, SeekFrom}, os::unix::prelude::MetadataExt};
 
 use axum::{http::{StatusCode}, headers, extract::{Path, State, TypedHeader, Query, BodyStream}, response::IntoResponse};
 use eyre::ContextCompat;
@@ -14,15 +14,15 @@ use crate::controllers::RegistryHttpResult;
 use super::RegistryHttpError;
 
 #[derive(Deserialize)]
-pub struct InitiateUploadQueryString {
+pub struct DigestQueryString {
     pub digest: String
 }
 
 #[tracing::instrument(skip_all)]
 pub async fn initiate_upload(
-    Path(container_ref): Path<String>, 
+    Path(container_ref): Path<String>,
     State(application): State<ApplicationState>,
-    query_string: Option<Query<InitiateUploadQueryString>>
+    query_string: Option<Query<DigestQueryString>>
 ) -> RegistryHttpResult {
     reject_invalid_container_names(&container_ref)?;
 
@@ -106,9 +106,9 @@ pub async fn process_blob_chunk_upload(
         .ok_or_else(|| RegistryHttpError::InvalidUploadId(Cow::from(raw_upload_uuid.clone())))?;
 
     let mut file = if upload_entry.temporary_file.is_file() {
-        tokio::fs::File::open(&&upload_entry.temporary_file).await?
+        tokio::fs::File::open(&upload_entry.temporary_file).await?
     } else {
-        tokio::fs::File::create(&&upload_entry.temporary_file).await?
+        tokio::fs::File::create(&upload_entry.temporary_file).await?
     };
 
     file.seek(io::SeekFrom::End(0)).await.unwrap();
@@ -140,6 +140,59 @@ pub async fn process_blob_chunk_upload(
             ("Docker-Upload-UUID", raw_upload_uuid),
             ("Location", upload_entry.http_upload_uri()),
             ("Docker-Distribution-Api-Version", "registry/2.0".to_string())
+        ]
+    ).into_response())
+}
+
+#[tracing::instrument(skip_all)]
+pub async fn finalize_blob_upload(
+    Path((container_ref, raw_upload_uuid)): Path<(String, String)>,
+    State(application): State<ApplicationState>,
+    range: Option<TypedHeader<headers::ContentRange>>,
+    Query(digest): Query<DigestQueryString>,
+    mut layer: BodyStream
+) -> RegistryHttpResult {
+    let (_, hash) = digest.digest
+        .split_once(':')
+        .ok_or_else(|| RegistryHttpError::InvalidHashFormat(Cow::from(digest.digest.clone())))?;
+
+    let upload_uuid = Uuid::try_parse(&raw_upload_uuid)?;
+    let upload_map = application.uploads.read().await;
+
+    let upload_entry = upload_map.get(&upload_uuid)
+        .ok_or_else(|| RegistryHttpError::InvalidUploadId(Cow::from(raw_upload_uuid.clone())))?;
+
+    let mut file = if upload_entry.temporary_file.is_file() {
+        tokio::fs::File::open(&upload_entry.temporary_file).await?
+    } else {
+        tokio::fs::File::create(&upload_entry.temporary_file).await?
+    };
+
+    file.seek(SeekFrom::End(0)).await?;
+
+    while let Some(chunk) = layer.next().await {
+        let chunk = chunk?;
+        file.write(&chunk).await?;
+    }
+
+    // Enf of upload, close the file and move it to its resting place
+    drop(file);
+
+    let blob_file_path = application.configuration.registry_storage
+        .join(&container_ref)
+        .join("blobs")
+        .join(&hash);
+
+    let parent = blob_file_path.parent().context("No parent to a constructed path ?")?;
+    tokio::fs::create_dir_all(parent).await?;
+
+    tokio::fs::rename(&upload_entry.temporary_file, &blob_file_path).await?;
+
+    Ok((
+        StatusCode::CREATED,
+        [
+            ("Location", format!("/v2/{}/blobs/{}", container_ref, digest.digest)),
+            ("Docker-Content-Digest", digest.digest.clone())
         ]
     ).into_response())
 }

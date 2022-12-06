@@ -52,7 +52,11 @@ async fn main() -> eyre::Result<()> {
         .route("/", get(controllers::base::root))
         .route("/v2/", get(controllers::base::registry_base))
         .route("/v2/:container_ref/blobs/uploads/", post(controllers::blobs::initiate_upload))
-        .route("/v2/:container_ref/blobs/uploads/:uuid", patch(controllers::blobs::process_blob_chunk_upload))
+        .route(
+            "/v2/:container_ref/blobs/uploads/:uuid", 
+            patch(controllers::blobs::process_blob_chunk_upload)
+                .put(controllers::blobs::finalize_blob_upload)
+        )
         .route("/v2/:container_ref/blobs/:digest", head(controllers::blobs::check_blob_exists))
         .with_state(application_state)
         /*
