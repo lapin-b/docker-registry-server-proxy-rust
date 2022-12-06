@@ -1,4 +1,4 @@
-use std::borrow::Cow;
+use std::{borrow::Cow};
 
 use axum::{response::{Response, IntoResponse}, Json, http::StatusCode};
 
@@ -22,7 +22,8 @@ impl <T: IntoResponse> IntoRegistryHttpResult for T {
 #[derive(Debug)]
 pub enum RegistryHttpError {
     InvalidName(Cow<'static, str>),
-    RegistryInternalError(String)
+    InvalidHashFormat(Cow<'static, str>),
+    RegistryInternalError(String),
 }
 
 impl RegistryHttpError {
@@ -45,6 +46,12 @@ impl IntoResponse for RegistryHttpError {
                 (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     Json(RegistryJsonError::new("INTERNAL_ERROR", "An internal server error occured", &description))
+                ).into_response()
+            },
+            RegistryHttpError::InvalidHashFormat(hash) => {
+                (
+                    StatusCode::BAD_REQUEST,
+                    Json(RegistryJsonError::new("BLOB_UNKNOWN", "Invalid hash format", &hash))
                 ).into_response()
             },
         }

@@ -8,7 +8,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 use axum::Router;
 use axum::extract::FromRef;
-use axum::routing::{get, post};
+use axum::routing::{get, post, head};
 use axum::ServiceExt;
 use tokio::sync::RwLock;
 use tower::Layer;
@@ -51,7 +51,8 @@ async fn main() -> eyre::Result<()> {
     let app = Router::new()
         .route("/", get(controllers::base::root))
         .route("/v2/", get(controllers::base::registry_base))
-        .route("/v2/:containerRef/blobs/uploads/", post(controllers::blobs::initiate_upload))
+        .route("/v2/:container_ref/blobs/uploads/", post(controllers::blobs::initiate_upload))
+        .route("/v2/:container_ref/blobs/:digest", head(controllers::blobs::check_blob_exists))
         .with_state(application_state)
         /*
         Routes remaining/http/0.2.8/http/request/struct.Request.html
