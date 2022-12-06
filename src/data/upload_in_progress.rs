@@ -56,7 +56,14 @@ impl UploadsStore {
 
     pub async fn delete_upload_uuid(&self, upload: &str) -> Result<(), uuid::Error> {
         let uuid = upload.parse()?;
-        Ok(self.delete_upload(uuid).await)
+        self.delete_upload(uuid).await;
+        Ok(())
+    }
+}
+
+impl Default for UploadsStore {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

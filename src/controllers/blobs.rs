@@ -98,7 +98,7 @@ pub async fn process_blob_chunk_upload(
 
     while let Some(chunk) = layer.next().await {
         let chunk = chunk?;
-        file.write(&chunk).await?;
+        file.write_all(&chunk).await?;
     }
 
     let seek_position = file.stream_position().await?;
@@ -136,7 +136,7 @@ pub async fn finalize_blob_upload(
     file.seek(SeekFrom::End(0)).await?;
     while let Some(chunk) = layer.next().await {
         let chunk = chunk?;
-        file.write(&chunk).await?;
+        file.write_all(&chunk).await?;
     }
 
     // Enf of upload, close the file and move it to its resting place
