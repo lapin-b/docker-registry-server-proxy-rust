@@ -19,7 +19,7 @@ pub async fn initiate_upload(
     let mut uploads = application.uploads.write().await;
     let upload = UploadInProgress::new(&container_ref, &application.configuration.temporary_registry_storage);
     let upload_id = upload.id;
-    tracing::info!("Initiating upload for [{}] blob {}", container_ref, upload_id);
+    info!("Initiating upload for [{}] blob {}", container_ref, upload_id);
     uploads.insert(upload_id, upload);
     drop(uploads);
 
@@ -38,7 +38,7 @@ pub async fn initiate_upload(
     ).into_response())
 }
 
-#[tracing::instrument(skip_all)]
+#[tracing::instrument(skip_all, fields(container_ref = container_ref))]
 pub async fn check_blob_exists(
     Path((container_ref, digest)): Path<(String, String)>,
     State(app_state): State<ApplicationState>
@@ -47,8 +47,6 @@ pub async fn check_blob_exists(
     let (algo, hash) = digest
         .split_once(':')
         .ok_or_else(|| RegistryHttpError::InvalidHashFormat(Cow::from(digest.clone())))?;
-    
-    info!("Looking for blob [{}] in [{}]", container_ref, hash);
 
     let file_path = app_state.configuration
         .registry_storage
@@ -56,11 +54,15 @@ pub async fn check_blob_exists(
         .join("blobs")
         .join(hash);
 
-    info!("Checking {:?}", file_path);
+    info!("Checking if path [{:?}] exists", file_path);
 
     let file_metadata = match tokio::fs::metadata(&file_path).await {
-        Ok(metadata) => metadata,
+        Ok(metadata) => {
+            info!("File exists and is accessible");
+            metadata
+        },
         Err(e) if e.kind() == io::ErrorKind::NotFound => {
+            info!("File not found, returning 404");
             return Ok((StatusCode::NOT_FOUND).into_response())
         }
         Err(e) => return Err(e.into())
