@@ -10,8 +10,7 @@ use axum::Router;
 use axum::extract::FromRef;
 use axum::routing::{get, post, head, patch};
 use axum::ServiceExt;
-use data::upload_in_progress::UploadsStoreCommands;
-use tokio::sync::{RwLock, mpsc};
+use tokio::sync::RwLock;
 use tower::Layer;
 use tower_http::trace::TraceLayer;
 use tracing::info;
@@ -24,7 +23,7 @@ pub type UploadsInProgressState = Arc<RwLock<UploadsStore>>;
 
 #[derive(FromRef, Clone)]
 pub struct ApplicationState {
-    configuration: Arc<Configuration>,
+    conf: Arc<Configuration>,
     uploads: UploadsStore
 }
 
@@ -46,7 +45,7 @@ async fn main() -> eyre::Result<()> {
     tokio::fs::create_dir_all(&configuration.temporary_registry_storage).await?;
 
     let application_state = ApplicationState {
-        configuration: Arc::new(configuration),
+        conf: Arc::new(configuration),
         uploads: UploadsStore::new()
     };
 

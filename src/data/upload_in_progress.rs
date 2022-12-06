@@ -3,13 +3,15 @@ use std::{collections::HashMap, path::{PathBuf, Path}, time::Instant, sync::Arc}
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
+use super::helpers::RegistryPathsHelper;
+
 type UploadStoreItem = Arc<RwLock<Upload>>;
 
 #[derive(Debug)]
 pub struct Upload {
     pub id: Uuid,
+    pub temporary_file_path: PathBuf,
     pub container_reference: String,
-    pub temporary_file: PathBuf,
     pub last_interacted_with: Instant
 }
 
@@ -59,24 +61,31 @@ impl UploadsStore {
 }
 
 impl Upload {
-    pub fn new(container_reference: &str, registry_root: &Path) -> Self {
+    pub fn new(container_reference: &str, temporary_root: &Path) -> Self {
         let id = Uuid::new_v4();
-        let temporary_file = registry_root.join(format!("blobs/{}", id));
 
         Self {
             id,
+            temporary_file_path: RegistryPathsHelper::temporary_blob_path(temporary_root, id),
             container_reference: container_reference.to_string(),
-            temporary_file,
             last_interacted_with: Instant::now(),
         }
     }
 
     pub fn create_containing_directory(&self) -> impl std::future::Future<Output = Result<(), std::io::Error>> + '_ {
-        let parent = self.temporary_file
+        let parent = self.temporary_file_path
             .parent()
             .expect("Expected parent of the file");
 
         tokio::fs::create_dir_all(parent)
+    }
+
+    pub async fn create_or_open_upload_file(&self) -> std::io::Result<tokio::fs::File> {
+        if self.temporary_file_path.is_file() {
+            tokio::fs::File::open(&self.temporary_file_path).await
+        } else {
+            tokio::fs::File::create(&self.temporary_file_path).await
+        }
     }
 
     pub fn http_upload_uri(&self) -> String {

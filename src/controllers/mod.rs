@@ -24,6 +24,7 @@ pub enum RegistryHttpError {
     InvalidName(Cow<'static, str>),
     InvalidHashFormat(Cow<'static, str>),
     InvalidUploadId(Cow<'static, str>),
+
     RegistryInternalError(String),
 }
 
