@@ -8,7 +8,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 use axum::Router;
 use axum::extract::FromRef;
-use axum::routing::{get, post, head};
+use axum::routing::{get, post, head, patch};
 use axum::ServiceExt;
 use tokio::sync::RwLock;
 use tower::Layer;
@@ -31,7 +31,7 @@ async fn main() -> eyre::Result<()> {
     tracing_subscriber::registry()
         .with(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "info,tower_http=debug".into())
+                .unwrap_or_else(|_| "info,tower_http=debug,pull_registry_attempt=debug".into())
         )
         .with(tracing_subscriber::fmt::layer())
         .init();
@@ -52,6 +52,7 @@ async fn main() -> eyre::Result<()> {
         .route("/", get(controllers::base::root))
         .route("/v2/", get(controllers::base::registry_base))
         .route("/v2/:container_ref/blobs/uploads/", post(controllers::blobs::initiate_upload))
+        .route("/v2/:container_ref/blobs/uploads/:uuid", patch(controllers::blobs::process_blob_chunk_upload))
         .route("/v2/:container_ref/blobs/:digest", head(controllers::blobs::check_blob_exists))
         .with_state(application_state)
         /*

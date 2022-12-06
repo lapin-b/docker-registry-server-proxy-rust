@@ -36,4 +36,8 @@ impl UploadInProgress {
     pub fn http_upload_uri(&self) -> String {
         format!("/v2/{}/blobs/uploads/{}", self.container_reference, self.id)
     }
+
+    pub fn update_last_interacted(&mut self) {
+        self.last_interacted_with = Instant::now();
+    }
 }

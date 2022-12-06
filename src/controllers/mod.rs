@@ -23,12 +23,13 @@ impl <T: IntoResponse> IntoRegistryHttpResult for T {
 pub enum RegistryHttpError {
     InvalidName(Cow<'static, str>),
     InvalidHashFormat(Cow<'static, str>),
+    InvalidUploadId(Cow<'static, str>),
     RegistryInternalError(String),
 }
 
 impl RegistryHttpError {
     fn from_report(err: eyre::Report) -> Self {
-        tracing::error!("HTTP handler error: {:?}", err.root_cause());
+        tracing::error!("HTTP handler error: {:#?}", err);
         Self::RegistryInternalError(format!("Registry internal error: {:#}", err))
     }
 }
@@ -51,10 +52,22 @@ impl IntoResponse for RegistryHttpError {
             RegistryHttpError::InvalidHashFormat(hash) => {
                 (
                     StatusCode::BAD_REQUEST,
-                    Json(RegistryJsonError::new("BLOB_UNKNOWN", "Invalid hash format", &hash))
+                    Json(RegistryJsonError::new("UNSUPPORTED", "Invalid hash format", &hash))
+                ).into_response()
+            },
+            RegistryHttpError::InvalidUploadId(id) => {
+                (
+                    StatusCode::NOT_FOUND,
+                    Json(RegistryJsonError::new("UNSUPPORTED", "Invalid pending upload indentifier or not found", &id))
                 ).into_response()
             },
         }
+    }
+}
+
+impl From<uuid::Error> for RegistryHttpError {
+    fn from(value: uuid::Error) -> Self {
+        Self::InvalidUploadId(Cow::from(value.to_string()))
     }
 }
 
@@ -70,3 +83,4 @@ macro_rules! impl_into_registry_error {
 
 impl_into_registry_error!(std::io::Error);
 impl_into_registry_error!(eyre::Report);
+impl_into_registry_error!(axum::Error);

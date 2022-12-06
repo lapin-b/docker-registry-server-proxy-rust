@@ -1,20 +1,34 @@
 use std::{borrow::Cow, io, os::unix::prelude::MetadataExt};
 
-use axum::{http::StatusCode, extract::{Path, State}, response::IntoResponse};
+use axum::{http::{StatusCode}, headers, extract::{Path, State, TypedHeader, Query, BodyStream}, response::IntoResponse};
 use eyre::ContextCompat;
-use tracing::info;
+use futures_util::StreamExt;
+use serde::Deserialize;
+use tokio::io::{AsyncSeekExt, BufWriter, AsyncWriteExt};
+use tracing::{info, debug};
+use uuid::Uuid;
 
 use crate::{data::{upload_in_progress::UploadInProgress, helpers::reject_invalid_container_names}, ApplicationState};
 use crate::controllers::RegistryHttpResult;
 
 use super::RegistryHttpError;
 
+#[derive(Deserialize)]
+pub struct InitiateUploadQueryString {
+    pub digest: String
+}
+
 #[tracing::instrument(skip_all)]
 pub async fn initiate_upload(
     Path(container_ref): Path<String>, 
     State(application): State<ApplicationState>,
+    query_string: Option<Query<InitiateUploadQueryString>>
 ) -> RegistryHttpResult {
     reject_invalid_container_names(&container_ref)?;
+
+    if query_string.is_some() {
+        return Ok((StatusCode::NOT_IMPLEMENTED).into_response());
+    }
 
     let mut uploads = application.uploads.write().await;
     let upload = UploadInProgress::new(&container_ref, &application.configuration.temporary_registry_storage);
@@ -29,7 +43,7 @@ pub async fn initiate_upload(
     upload.create_containing_directory().await?;
 
     Ok((
-        StatusCode::CREATED,
+        StatusCode::ACCEPTED,
         [
             ("Location", upload.http_upload_uri()),
             ("Range", "0-0".to_string()),
@@ -73,6 +87,59 @@ pub async fn check_blob_exists(
         [
             ("Content-Length", file_metadata.size().to_string()),
             ("Docker-Content-Digest", [algo, hash].join(":"))
+        ]
+    ).into_response())
+}
+
+#[tracing::instrument(skip_all)]
+pub async fn process_blob_chunk_upload(
+    Path((container_ref, raw_upload_uuid)): Path<(String, String)>,
+    State(application): State<ApplicationState>,
+    range: Option<TypedHeader<headers::ContentRange>>,
+    mut layer: BodyStream
+) -> RegistryHttpResult {
+    let upload_uuid = Uuid::try_parse(&raw_upload_uuid)?;
+    let upload_map = application.uploads.read().await;
+
+    // Récupérer les infos sur le fichier temporaire et le bordel
+    let upload_entry = upload_map.get(&upload_uuid)
+        .ok_or_else(|| RegistryHttpError::InvalidUploadId(Cow::from(raw_upload_uuid.clone())))?;
+
+    let mut file = if upload_entry.temporary_file.is_file() {
+        tokio::fs::File::open(&&upload_entry.temporary_file).await?
+    } else {
+        tokio::fs::File::create(&&upload_entry.temporary_file).await?
+    };
+
+    file.seek(io::SeekFrom::End(0)).await.unwrap();
+    let seek_position = file.stream_position().await.unwrap();
+    let initial_file_size = file.metadata().await?.size();
+
+    let start_range = range
+        .clone()
+        .map(
+            |header| header.0.bytes_range()
+                .map(|(start, _)| start)
+                .unwrap_or_default()
+        )
+        .unwrap_or_default();
+
+    debug!("Initial condition: seek position {}, file size {}, initial range {}, full range {:?}", seek_position, initial_file_size, start_range, range);
+    while let Some(chunk) = layer.next().await {
+        let chunk = chunk?;
+        file.write(&chunk).await?;
+    }
+    let seek_position = file.stream_position().await.unwrap();
+    let final_file_size = file.metadata().await.unwrap().size();
+    debug!("Final condition: seek position {}, file size {}, initial range {}, full range {:?}", seek_position, final_file_size, start_range, range);
+
+    Ok((
+        StatusCode::ACCEPTED,
+        [
+            ("Range", format!("0-{}", seek_position)),
+            ("Docker-Upload-UUID", raw_upload_uuid),
+            ("Location", upload_entry.http_upload_uri()),
+            ("Docker-Distribution-Api-Version", "registry/2.0".to_string())
         ]
     ).into_response())
 }
