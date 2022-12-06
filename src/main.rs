@@ -16,7 +16,7 @@ use tower_http::trace::TraceLayer;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use crate::configuration::Configuration;
-use crate::data::incomplete_upload::UploadInProgressStore;
+use crate::data::upload_in_progress::UploadInProgressStore;
 
 pub type UploadsInProgressState = Arc<RwLock<UploadInProgressStore>>;
 

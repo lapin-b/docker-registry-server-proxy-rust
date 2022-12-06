@@ -1,2 +1,2 @@
-pub mod incomplete_upload;
+pub mod upload_in_progress;
 pub mod json_registry_error;

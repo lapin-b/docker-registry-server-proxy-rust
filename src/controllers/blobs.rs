@@ -3,7 +3,7 @@ use std::borrow::Cow;
 use axum::{http::StatusCode, extract::{Path, State}, response::IntoResponse};
 use eyre::ContextCompat;
 
-use crate::{data::incomplete_upload::UploadInProgress, ApplicationState, controllers::RegistryHttpError};
+use crate::{data::upload_in_progress::UploadInProgress, ApplicationState, controllers::RegistryHttpError};
 use crate::controllers::RegistryHttpResult;
 
 #[tracing::instrument(skip_all)]
