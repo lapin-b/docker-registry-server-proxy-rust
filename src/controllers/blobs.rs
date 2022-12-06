@@ -1,14 +1,14 @@
 use std::{borrow::Cow, io::{self, SeekFrom}, os::unix::prelude::MetadataExt};
 
-use axum::{http::{StatusCode}, headers, extract::{Path, State, TypedHeader, Query, BodyStream}, response::IntoResponse};
+use axum::{http::StatusCode, extract::{Path, State, Query, BodyStream}, response::IntoResponse};
 use eyre::ContextCompat;
 use futures_util::StreamExt;
 use serde::Deserialize;
-use tokio::io::{AsyncSeekExt, BufWriter, AsyncWriteExt};
-use tracing::{info, debug};
-use uuid::Uuid;
+use tokio::io::{AsyncSeekExt, AsyncWriteExt};
+use tracing::info;
 
-use crate::{data::{helpers::{reject_invalid_container_names, RegistryPathsHelper}}, ApplicationState};
+
+use crate::{data::helpers::{reject_invalid_container_names, RegistryPathsHelper}, ApplicationState};
 use crate::controllers::RegistryHttpResult;
 
 use super::RegistryHttpError;
@@ -83,7 +83,7 @@ pub async fn check_blob_exists(
 
 #[tracing::instrument(skip_all)]
 pub async fn process_blob_chunk_upload(
-    Path((container_ref, raw_upload_uuid)): Path<(String, String)>,
+    Path((_container_ref, raw_upload_uuid)): Path<(String, String)>,
     State(app): State<ApplicationState>,
     mut layer: BodyStream
 ) -> RegistryHttpResult {
