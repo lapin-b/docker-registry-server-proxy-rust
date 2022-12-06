@@ -14,7 +14,7 @@ pub async fn rewrite_container_part_url<B>(mut req: Request<B>, next: Next<B>) -
         format!(
             "/v2/{}{}/{}{}",
             captures.name("isProxy").map(|m| m.as_str()).unwrap_or(""),
-            captures.name("containerRef").unwrap().as_str().replace('/', "~"),
+            captures.name("containerRef").unwrap().as_str().replace('/', "%2F"),
             captures.name("object").unwrap().as_str(),
             captures.name("rest").unwrap().as_str()
         )
