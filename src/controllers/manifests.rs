@@ -44,10 +44,12 @@ pub async fn upload_manifest(
     let mut manifest_meta_file = tokio::fs::File::create(&manifest_meta_path).await?;
     manifest_meta_file.write_all(serde_json::to_string_pretty(&manifest_meta).unwrap().as_bytes()).await?;
 
-    drop(manifest_file);
-    drop(manifest_meta);
-
-    let manifest_sha256 = helpers::file256sum_async(manifest_path).await??;
+    let manifest_sha256 = helpers::file256sum_async(manifest_path.clone()).await??;
+    info!("Copying to hash references to enable pull by hash");
+    let hash_manifest_path = RegistryPathsHelper::manifest_path(&app.conf.registry_storage, &container_ref, &format!("sha256:{}", manifest_sha256));
+    let hash_manifest_meta_path = RegistryPathsHelper::manifest_meta(&app.conf.registry_storage, &container_ref, &format!("sha256:{}", manifest_sha256));
+    tokio::fs::copy(&manifest_path, &hash_manifest_path).await?;
+    tokio::fs::copy(&manifest_meta_path, &hash_manifest_meta_path).await?;
 
     Ok((
         StatusCode::CREATED,
