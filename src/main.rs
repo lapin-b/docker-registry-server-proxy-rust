@@ -8,7 +8,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 use axum::Router;
 use axum::extract::FromRef;
-use axum::routing::{get, post, head, patch, put};
+use axum::routing::{get, post, patch};
 use axum::ServiceExt;
 use tokio::sync::RwLock;
 use tower::Layer;
@@ -59,25 +59,17 @@ async fn main() -> eyre::Result<()> {
                 .put(controllers::uploads::finalize_blob_upload)
                 .delete(controllers::uploads::delete_upload)
         )
-        .route("/v2/:container_ref/blobs/:digest", head(controllers::blobs::check_blob_exists))
+        .route(
+            "/v2/:container_ref/blobs/:digest", 
+            get(controllers::blobs::check_blob_exists)
+                .head(controllers::blobs::check_blob_exists)
+        )
         .route(
             "/v2/:container_ref/manifests/:reference", 
             get(controllers::manifests::fetch_manifest)
                 .put(controllers::manifests::upload_manifest)
         )
         .with_state(application_state)
-        /*
-        Routes remaining/http/0.2.8/http/request/struct.Request.html
-        Get an image
-        GET /v2/<name>/manifests/<reference>
-        GET /v2/<name>/blobs/<digest>
-
-        Push an image
-        POST        /v2/<name>/blobs/uploads/
-        PUT | PATCH /v2/<name>/blobs/uploads/<uuid>
-        HEAD        /v2/<name>/blobs/<digest>
-        PUT         /v2/<name>/manifests/<reference>
-         */
         .layer(TraceLayer::new_for_http());
 
     let url_rewrite_layer = axum::middleware::from_fn(requests::rewrite_container_part_url);

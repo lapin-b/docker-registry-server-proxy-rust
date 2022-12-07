@@ -1,5 +1,6 @@
 use std::path::{PathBuf, Path};
 
+use sha2::{Sha256, Digest};
 use uuid::Uuid;
 
 use crate::controllers::RegistryHttpError;
@@ -49,6 +50,20 @@ pub fn reject_invalid_tags_refs(tag: &str) -> Result<(), RegistryHttpError> {
     } else{
         Ok(())
     }
+}
+
+pub fn file256sum(path: &Path) -> std::io::Result<String> {
+    let mut file = std::fs::File::open(path)?;
+    let mut hasher = Sha256::new();
+    std::io::copy(&mut file, &mut hasher)?;
+    let hash = hasher.finalize();
+    Ok(base16ct::lower::encode_string(&hash))
+}
+
+pub fn file256sum_async(path: PathBuf) -> tokio::task::JoinHandle<std::io::Result<String>> {
+    tokio::task::spawn_blocking(move || {
+        file256sum(path.as_path())
+    })
 }
 
 fn ref_is_valid(rref: &str) -> bool {

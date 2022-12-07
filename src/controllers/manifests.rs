@@ -4,7 +4,7 @@ use serde::{Serialize, Deserialize};
 use tokio::io::AsyncWriteExt;
 use tracing::info;
 
-use crate::{data::helpers::{reject_invalid_container_refs, RegistryPathsHelper, reject_invalid_tags_refs}, ApplicationState};
+use crate::{data::helpers::{reject_invalid_container_refs, RegistryPathsHelper, reject_invalid_tags_refs, self}, ApplicationState};
 use crate::controllers::RegistryHttpResult;
 
 use super::RegistryHttpError;
@@ -45,9 +45,7 @@ pub async fn upload_manifest(
     drop(manifest_file);
     drop(manifest_meta);
 
-    let manifest_sha256 = tokio::task::spawn_blocking(move || {
-        sha256::try_digest(manifest_path.as_path())
-    }).await??;
+    let manifest_sha256 = helpers::file256sum_async(manifest_path).await??;
 
     Ok((
         StatusCode::CREATED,
@@ -79,7 +77,7 @@ pub async fn fetch_manifest(
     let manifest_meta = tokio::fs::read_to_string(&manifest_meta_path).await?;
     let manifest_meta = serde_json::from_str::<ManifestMetadata>(&manifest_meta).unwrap();
 
-    let manifest_sha256 = sha256::try_digest(manifest_path.as_path())?;
+    let manifest_sha256 = helpers::file256sum_async(manifest_path).await??;
     let manifest_stream = StreamBody::new(tokio_util::io::ReaderStream::new(manifest_file));
 
     Ok((
