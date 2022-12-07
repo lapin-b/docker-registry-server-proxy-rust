@@ -85,6 +85,7 @@ impl IntoResponse for RegistryHttpError {
 
         (
             http_code,
+            [("Content-Type", "application/json")],
             body
         ).into_response()
     }
