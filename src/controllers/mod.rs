@@ -1,4 +1,5 @@
 use axum::{response::{Response, IntoResponse}, http::StatusCode};
+use tracing::error;
 use crate::data::json_registry_error::RegistryJsonErrorReprWrapper;
 
 pub mod base;
@@ -52,7 +53,10 @@ impl IntoResponse for RegistryHttpError {
             RegistryHttpError::InvalidTagName(_) => (StatusCode::BAD_REQUEST, "TAG_INVALID"),
             RegistryHttpError::InvalidHashFormat(_) => (StatusCode::BAD_REQUEST, "UNSUPPORTED"),
             RegistryHttpError::UploadIdNotFound(_) => (StatusCode::NOT_FOUND, "UNSUPPORTED"),
-            RegistryHttpError::RegistryInternalError(_) => (StatusCode::INTERNAL_SERVER_ERROR, "UNKNOWN"),
+            RegistryHttpError::RegistryInternalError(ref report) => {
+                error!("Internal server error: {:#?}", report);
+                (StatusCode::INTERNAL_SERVER_ERROR, "UNKNOWN")
+            },
             // RegistryHttpError::MultipleErrors(_) => (StatusCode::BAD_REQUEST, ""),
         };
 

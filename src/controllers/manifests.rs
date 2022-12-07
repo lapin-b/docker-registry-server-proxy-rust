@@ -4,7 +4,7 @@ use serde::{Serialize, Deserialize};
 use tokio::io::AsyncWriteExt;
 use tracing::info;
 
-use crate::{data::helpers::{reject_invalid_refrence_names, RegistryPathsHelper}, ApplicationState};
+use crate::{data::helpers::{reject_invalid_container_refs, RegistryPathsHelper, reject_invalid_tags_refs}, ApplicationState};
 use crate::controllers::RegistryHttpResult;
 
 #[derive(Serialize, Deserialize)]
@@ -19,8 +19,8 @@ pub async fn upload_manifest(
     State(app): State<ApplicationState>,
     mut body: BodyStream
 ) -> RegistryHttpResult {
-    reject_invalid_refrence_names(&container_ref)?;
-    reject_invalid_refrence_names(&manifest_ref)?;
+    reject_invalid_container_refs(&container_ref)?;
+    reject_invalid_tags_refs(&manifest_ref)?;
 
     let manifest_path = RegistryPathsHelper::manifest_path(&app.conf.registry_storage, &container_ref, &manifest_ref);
     let manifest_meta_path = RegistryPathsHelper::manifest_meta(&app.conf.registry_storage, &container_ref, &manifest_ref);

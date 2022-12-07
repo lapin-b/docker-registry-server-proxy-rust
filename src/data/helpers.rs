@@ -35,12 +35,22 @@ impl RegistryPathsHelper {
     }
 }
 
-pub fn reject_invalid_refrence_names(container_ref: &str) -> Result<(), RegistryHttpError> {
-    if container_ref.contains("..") {
-        Err(RegistryHttpError::InvalidRepositoryName(container_ref.to_string()))
-    } else if container_ref.is_empty() {
-        Err(RegistryHttpError::InvalidRepositoryName("<empty name>".to_string()))
-    } else {
+pub fn reject_invalid_container_refs(container_ref: &str) -> Result<(), RegistryHttpError> {
+    if !ref_is_valid(container_ref) {
+        Err(RegistryHttpError::invalid_repository_name(&container_ref))
+    } else{
         Ok(())
     }
+}
+
+pub fn reject_invalid_tags_refs(tag: &str) -> Result<(), RegistryHttpError> {
+    if !ref_is_valid(tag) {
+        Err(RegistryHttpError::invalid_tag_name(&tag))
+    } else{
+        Ok(())
+    }
+}
+
+fn ref_is_valid(rref: &str) -> bool {
+    !rref.contains("..") && !rref.trim().is_empty()
 }

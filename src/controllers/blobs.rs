@@ -8,7 +8,7 @@ use tokio::io::{AsyncSeekExt, AsyncWriteExt};
 use tracing::info;
 
 
-use crate::{data::helpers::{reject_invalid_refrence_names, RegistryPathsHelper}, ApplicationState};
+use crate::{data::helpers::{reject_invalid_container_refs, RegistryPathsHelper}, ApplicationState};
 use crate::controllers::RegistryHttpResult;
 
 use super::RegistryHttpError;
@@ -24,7 +24,7 @@ pub async fn initiate_upload(
     State(application): State<ApplicationState>,
     query_string: Option<Query<DigestQueryString>>
 ) -> RegistryHttpResult {
-    reject_invalid_refrence_names(&container_ref)?;
+    reject_invalid_container_refs(&container_ref)?;
 
     if query_string.is_some() {
         return Ok((StatusCode::NOT_IMPLEMENTED).into_response());
@@ -51,7 +51,8 @@ pub async fn check_blob_exists(
     Path((container_ref, digest)): Path<(String, String)>,
     State(app): State<ApplicationState>
 ) -> RegistryHttpResult {
-    reject_invalid_refrence_names(&container_ref)?;
+    reject_invalid_container_refs(&container_ref)?;
+
     let (algo, hash) = digest
         .split_once(':')
         .ok_or(RegistryHttpError::invalid_hash_format(&digest))?;
@@ -83,10 +84,12 @@ pub async fn check_blob_exists(
 
 #[tracing::instrument(skip_all)]
 pub async fn process_blob_chunk_upload(
-    Path((_container_ref, raw_upload_uuid)): Path<(String, String)>,
+    Path((container_ref, raw_upload_uuid)): Path<(String, String)>,
     State(app): State<ApplicationState>,
     mut layer: BodyStream
 ) -> RegistryHttpResult {
+    reject_invalid_container_refs(&container_ref)?;
+
     let upload_lock = app.uploads
         .fetch_upload_string_uuid(&raw_upload_uuid)
         .await?
@@ -121,6 +124,8 @@ pub async fn finalize_blob_upload(
     Query(DigestQueryString { digest: docker_digest }): Query<DigestQueryString>,
     mut layer: BodyStream
 ) -> RegistryHttpResult {
+    reject_invalid_container_refs(&container_ref)?;
+
     let (_, hash) = docker_digest
         .split_once(':')
         .ok_or_else(|| RegistryHttpError::invalid_hash_format(&docker_digest))?;
@@ -153,7 +158,6 @@ pub async fn finalize_blob_upload(
     tokio::fs::rename(&upload.temporary_file_path, &blob_file_path).await?;
 
     let upload_id = upload.id;
-    drop(upload);
     app.uploads.delete_upload(upload_id).await;
 
     Ok((
