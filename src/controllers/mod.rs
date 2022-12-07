@@ -1,8 +1,9 @@
-use std::borrow::Cow;
+use std::{borrow::Cow, fmt};
 
 use axum::{response::{Response, IntoResponse}, Json, http::StatusCode};
+use uuid::Uuid;
 
-use crate::data::json_registry_error::RegistryJsonError;
+use crate::data::json_registry_error::RegistryJsonErrorReprWrapper;
 
 pub mod base;
 pub mod blobs;
@@ -10,80 +11,76 @@ pub mod manifests;
 
 pub type RegistryHttpResult = Result<Response, RegistryHttpError>;
 
-pub trait IntoRegistryHttpResult {
-    fn into_registry_result(self) -> RegistryHttpResult;
-}
-
-impl <T: IntoResponse> IntoRegistryHttpResult for T {
-    fn into_registry_result(self) -> RegistryHttpResult {
-        Ok(self.into_response())
-    }
-}
-
-#[derive(Debug)]
+#[derive(thiserror::Error, Debug)]
 pub enum RegistryHttpError {
-    InvalidName(Cow<'static, str>),
-    InvalidHashFormat(Cow<'static, str>),
-    InvalidUploadId(Cow<'static, str>),
+    #[error("Invalid repository name {0}")]
+    InvalidRepositoryName(String),
 
-    RegistryInternalError(String),
-}
-
-impl RegistryHttpError {
-    fn from_report(err: eyre::Report) -> Self {
-        tracing::error!("HTTP handler error: {:#?}", err);
-        Self::RegistryInternalError(format!("Registry internal error: {:#}", err))
-    }
+    #[allow(dead_code)]
+    #[error("Invalid tag name {0}")]
+    InvalidTagName(String),
+    
+    #[error("Invalid hash format {0}")]
+    InvalidHashFormat(String),
+    
+    #[error("Upload ID {0} not found or invalid")]
+    UploadIdNotFound(String),
+    
+    // #[error("Multiple registry errors: {0:?}")]
+    // MultipleErrors(Vec<Self>),
+    
+    #[error("Internal server error: {0}")]
+    RegistryInternalError(eyre::Report),
 }
 
 impl IntoResponse for RegistryHttpError {
     fn into_response(self) -> Response {
-        match self {
-            RegistryHttpError::InvalidName(name) => {
-                (
-                    StatusCode::BAD_REQUEST,
-                    Json(RegistryJsonError::new("NAME_INVALID", &format!("Name {} is invalid", name), ""))
-                ).into_response()
-            },
-            RegistryHttpError::RegistryInternalError(description) => {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(RegistryJsonError::new("INTERNAL_ERROR", "An internal server error occured", &description))
-                ).into_response()
-            },
-            RegistryHttpError::InvalidHashFormat(hash) => {
-                (
-                    StatusCode::BAD_REQUEST,
-                    Json(RegistryJsonError::new("UNSUPPORTED", "Invalid hash format", &hash))
-                ).into_response()
-            },
-            RegistryHttpError::InvalidUploadId(id) => {
-                (
-                    StatusCode::NOT_FOUND,
-                    Json(RegistryJsonError::new("UNSUPPORTED", "Invalid pending upload indentifier or not found", &id))
-                ).into_response()
-            },
-        }
+        let (http_code, registry_error) = match self {
+            RegistryHttpError::InvalidRepositoryName(_) => (StatusCode::BAD_REQUEST, "NAME_INVALID"),
+            RegistryHttpError::InvalidTagName(_) => (StatusCode::BAD_REQUEST, "TAG_INVALID"),
+            RegistryHttpError::InvalidHashFormat(_) => (StatusCode::BAD_REQUEST, "UNSUPPORTED"),
+            RegistryHttpError::UploadIdNotFound(_) => (StatusCode::NOT_FOUND, "UNSUPPORTED"),
+            RegistryHttpError::RegistryInternalError(_) => (StatusCode::INTERNAL_SERVER_ERROR, "UNKNOWN"),
+            // RegistryHttpError::MultipleErrors(_) => (StatusCode::BAD_REQUEST, ""),
+        };
+
+        let json_representaiton = match self {
+            // RegistryHttpError::MultipleErrors(errors) => {
+                // RegistryJsonErrorReprWrapper::multiple(errors.as_slice())
+            // }
+            RegistryHttpError::InvalidRepositoryName(error) => RegistryJsonErrorReprWrapper::single(registry_error, error, ""),
+            RegistryHttpError::InvalidTagName(error) => RegistryJsonErrorReprWrapper::single(registry_error, error, ""),
+            RegistryHttpError::InvalidHashFormat(error) => RegistryJsonErrorReprWrapper::single(registry_error, error, ""),
+            RegistryHttpError::UploadIdNotFound(error) => RegistryJsonErrorReprWrapper::single(registry_error, error, ""),
+            RegistryHttpError::RegistryInternalError(error) => RegistryJsonErrorReprWrapper::single(registry_error, error, ""),
+        };
+
+        let body = serde_json::to_string_pretty(&json_representaiton).unwrap();
+
+        (
+            http_code,
+            body
+        ).into_response()
     }
 }
 
-impl From<uuid::Error> for RegistryHttpError {
-    fn from(value: uuid::Error) -> Self {
-        Self::InvalidUploadId(Cow::from(value.to_string()))
-    }
-}
-
-macro_rules! impl_into_registry_error {
+macro_rules! impl_from {
     ($from:ty) => {
         impl From<$from> for RegistryHttpError {
-            fn from(err: $from) -> Self {
-                Self::from_report(err.into())
+            fn from(e: $from) -> Self {
+                Self::RegistryInternalError(e.into())
             }
         }
     };
 }
 
-impl_into_registry_error!(std::io::Error);
-impl_into_registry_error!(eyre::Report);
-impl_into_registry_error!(axum::Error);
-impl_into_registry_error!(tokio::task::JoinError);
+impl From<uuid::Error> for RegistryHttpError {
+    fn from(value: uuid::Error) -> Self {
+        Self::UploadIdNotFound(value.to_string())
+    }
+}
+
+impl_from!(std::io::Error);
+impl_from!(axum::Error);
+impl_from!(tokio::task::JoinError);
+impl_from!(eyre::Report);

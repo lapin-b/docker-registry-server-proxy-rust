@@ -5,8 +5,7 @@ use tokio::io::AsyncWriteExt;
 use tracing::info;
 
 use crate::{data::helpers::{reject_invalid_refrence_names, RegistryPathsHelper}, ApplicationState};
-
-use super::RegistryHttpResult;
+use crate::controllers::RegistryHttpResult;
 
 #[derive(Serialize, Deserialize)]
 pub struct ManifestMetadata {
