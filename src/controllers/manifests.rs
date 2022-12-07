@@ -1,3 +1,5 @@
+use std::os::unix::prelude::MetadataExt;
+
 use axum::{response::IntoResponse, extract::{Path, BodyStream, State}, TypedHeader, headers, http::StatusCode, body::StreamBody};
 use futures_util::StreamExt;
 use serde::{Serialize, Deserialize};
@@ -59,7 +61,7 @@ pub async fn upload_manifest(
 #[tracing::instrument(skip_all)]
 pub async fn fetch_manifest(
     Path((container_ref, manifest_ref)): Path<(String, String)>,
-    State(app): State<ApplicationState>
+    State(app): State<ApplicationState>,
 ) -> RegistryHttpResult {
     reject_invalid_container_refs(&container_ref)?;
     reject_invalid_tags_refs(&manifest_ref)?;
@@ -72,6 +74,7 @@ pub async fn fetch_manifest(
         }
         Err(e) => return Err(e.into())
     };
+    let manifest_size = manifest_file.metadata().await?.size();
 
     let manifest_meta_path = RegistryPathsHelper::manifest_meta(&app.conf.registry_storage, &container_ref, &manifest_ref);
     let manifest_meta = tokio::fs::read_to_string(&manifest_meta_path).await?;
@@ -83,8 +86,9 @@ pub async fn fetch_manifest(
     Ok((
         StatusCode::OK,
         [
-            ("Docker-Content-Digest", manifest_sha256),
-            ("Content-Type", manifest_meta.content_type)
+            ("Docker-Content-Digest", format!("sha256:{}", manifest_sha256)),
+            ("Content-Type", manifest_meta.content_type),
+            ("Content-Length", manifest_size.to_string())
         ],
         manifest_stream
     ).into_response())
