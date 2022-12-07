@@ -53,7 +53,7 @@ impl IntoResponse for RegistryHttpError {
             RegistryHttpError::InvalidRepositoryName(_) => (StatusCode::BAD_REQUEST, "NAME_INVALID"),
             RegistryHttpError::InvalidTagName(_) => (StatusCode::BAD_REQUEST, "TAG_INVALID"),
             RegistryHttpError::InvalidHashFormat(_) => (StatusCode::BAD_REQUEST, "UNSUPPORTED"),
-            RegistryHttpError::UploadIdNotFound(_) => (StatusCode::NOT_FOUND, "UNSUPPORTED"),
+            RegistryHttpError::UploadIdNotFound(_) => (StatusCode::NOT_FOUND, "BLOB_UPLOAD_UNKNOWN"),
             RegistryHttpError::RegistryInternalError(ref report) => {
                 error!("Internal server error: {:#?}", report);
                 (StatusCode::INTERNAL_SERVER_ERROR, "UNKNOWN")
