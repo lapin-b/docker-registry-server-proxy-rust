@@ -95,6 +95,14 @@ impl Upload {
         }
     }
 
+    pub async fn remove_temporary_file(&self) -> std::io::Result<()> {
+        if self.temporary_file_path.is_file() {
+            tokio::fs::remove_file(&self.temporary_file_path).await?;
+        }
+
+        Ok(())
+    }
+
     pub fn http_upload_uri(&self) -> String {
         format!("/v2/{}/blobs/uploads/{}", self.container_reference, self.id)
     }

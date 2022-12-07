@@ -57,6 +57,7 @@ async fn main() -> eyre::Result<()> {
             "/v2/:container_ref/blobs/uploads/:uuid", 
             patch(controllers::uploads::process_blob_chunk_upload)
                 .put(controllers::uploads::finalize_blob_upload)
+                .delete(controllers::uploads::delete_upload)
         )
         .route("/v2/:container_ref/blobs/:digest", head(controllers::blobs::check_blob_exists))
         .route("/v2/:container_ref/manifests/:reference", put(controllers::manifests::upload_manifest))

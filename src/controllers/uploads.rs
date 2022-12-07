@@ -46,6 +46,28 @@ pub async fn initiate_upload(
 }
 
 #[tracing::instrument(skip_all)]
+pub async fn delete_upload(
+    Path((container_ref, raw_upload_uuid)): Path<(String, String)>,
+    State(app): State<ApplicationState>
+) -> RegistryHttpResult {
+    reject_invalid_container_refs(&container_ref)?;
+
+    let upload_lock = app.uploads
+        .fetch_upload_string_uuid(&raw_upload_uuid)
+        .await?
+        .ok_or_else(|| RegistryHttpError::upload_id_not_found(&raw_upload_uuid))?;
+
+
+    let upload = upload_lock.read().await;
+
+    // Check container ref then remove
+    upload.remove_temporary_file().await?;
+    app.uploads.delete_upload(upload.id).await;
+
+    Ok((StatusCode::NO_CONTENT, "").into_response())
+}
+
+#[tracing::instrument(skip_all)]
 pub async fn process_blob_chunk_upload(
     Path((container_ref, raw_upload_uuid)): Path<(String, String)>,
     State(app): State<ApplicationState>,
