@@ -29,6 +29,22 @@ pub enum RegistryHttpError {
     RegistryInternalError(eyre::Report),
 }
 
+macro_rules! registry_error_constructor {
+    ($funct_name:ident, $item:ident) => {
+        #[allow(dead_code)]
+        pub fn $funct_name<S: ToString>(s: S) -> Self {
+            Self::$item(s.to_string())
+        }
+    };
+}
+
+impl RegistryHttpError {
+    registry_error_constructor!(invalid_repository_name, InvalidRepositoryName);
+    registry_error_constructor!(invalid_tag_name, InvalidTagName);
+    registry_error_constructor!(invalid_hash_format, InvalidHashFormat);
+    registry_error_constructor!(upload_id_not_found, UploadIdNotFound);
+}
+
 impl IntoResponse for RegistryHttpError {
     fn into_response(self) -> Response {
         let (http_code, registry_error) = match self {

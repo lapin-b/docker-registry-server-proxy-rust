@@ -54,7 +54,7 @@ pub async fn check_blob_exists(
     reject_invalid_refrence_names(&container_ref)?;
     let (algo, hash) = digest
         .split_once(':')
-        .ok_or(RegistryHttpError::InvalidHashFormat(digest.clone()))?;
+        .ok_or(RegistryHttpError::invalid_hash_format(&digest))?;
 
     let file_path = RegistryPathsHelper::blob_path(&app.conf.registry_storage, &container_ref, hash);
 
@@ -90,7 +90,7 @@ pub async fn process_blob_chunk_upload(
     let upload_lock = app.uploads
         .fetch_upload_string_uuid(&raw_upload_uuid)
         .await?
-        .ok_or(RegistryHttpError::UploadIdNotFound(raw_upload_uuid.clone()))?;
+        .ok_or_else(|| RegistryHttpError::upload_id_not_found(&raw_upload_uuid))?;
 
     let upload = upload_lock.read().await;
     let mut file = upload.create_or_open_upload_file().await?;
@@ -123,12 +123,12 @@ pub async fn finalize_blob_upload(
 ) -> RegistryHttpResult {
     let (_, hash) = docker_digest
         .split_once(':')
-        .ok_or(RegistryHttpError::InvalidHashFormat(docker_digest.clone()))?;
+        .ok_or_else(|| RegistryHttpError::invalid_hash_format(&docker_digest))?;
 
     let upload_lock = app.uploads
         .fetch_upload_string_uuid(&raw_upload_uuid)
         .await?
-        .ok_or_else(|| RegistryHttpError::UploadIdNotFound(raw_upload_uuid.clone()))?;
+        .ok_or_else(|| RegistryHttpError::upload_id_not_found(&raw_upload_uuid))?;
 
     let upload = upload_lock.read().await;
 
