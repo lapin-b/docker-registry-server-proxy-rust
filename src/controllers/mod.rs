@@ -1,8 +1,4 @@
-use std::{borrow::Cow, fmt};
-
-use axum::{response::{Response, IntoResponse}, Json, http::StatusCode};
-use uuid::Uuid;
-
+use axum::{response::{Response, IntoResponse}, http::StatusCode};
 use crate::data::json_registry_error::RegistryJsonErrorReprWrapper;
 
 pub mod base;

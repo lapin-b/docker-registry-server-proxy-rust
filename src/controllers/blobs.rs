@@ -1,4 +1,4 @@
-use std::{borrow::Cow, io::{self, SeekFrom}, os::unix::prelude::MetadataExt};
+use std::{io::{self, SeekFrom}, os::unix::prelude::MetadataExt};
 
 use axum::{http::StatusCode, extract::{Path, State, Query, BodyStream}, response::IntoResponse};
 use eyre::ContextCompat;
