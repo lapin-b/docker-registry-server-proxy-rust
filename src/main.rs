@@ -17,7 +17,7 @@ use tracing::info;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use crate::configuration::Configuration;
-use crate::data::upload_in_progress::UploadsStore;
+use crate::data::uploads::UploadsStore;
 
 pub type UploadsInProgressState = Arc<RwLock<UploadsStore>>;
 

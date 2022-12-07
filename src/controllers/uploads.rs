@@ -57,7 +57,6 @@ pub async fn delete_upload(
         .await?
         .ok_or_else(|| RegistryHttpError::upload_id_not_found(&raw_upload_uuid))?;
 
-
     let upload = upload_lock.read().await;
 
     // Check container ref then remove

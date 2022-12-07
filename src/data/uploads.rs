@@ -79,12 +79,16 @@ impl Upload {
         }
     }
 
-    pub fn create_containing_directory(&self) -> impl std::future::Future<Output = Result<(), std::io::Error>> + '_ {
+    pub async fn create_containing_directory(&self) -> Result<(), std::io::Error> {
         let parent = self.temporary_file_path
             .parent()
             .expect("Expected parent of the file");
 
-        tokio::fs::create_dir_all(parent)
+        if parent.is_dir() {
+            return Ok(())
+        }
+
+        tokio::fs::create_dir_all(parent).await
     }
 
     pub async fn create_or_open_upload_file(&self) -> std::io::Result<tokio::fs::File> {
