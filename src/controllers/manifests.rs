@@ -38,7 +38,7 @@ pub async fn upload_manifest(
     info!("Writing manifest metadata to {:?}", manifest_meta_path);
     let manifest_meta = ManifestMetadata { content_type: content_type.to_string() };
     let mut manifest_meta_file = tokio::fs::File::create(&manifest_meta_path).await?;
-    manifest_meta_file.write_all(&serde_json::to_string_pretty(&manifest_meta).unwrap().as_bytes()).await?;
+    manifest_meta_file.write_all(serde_json::to_string_pretty(&manifest_meta).unwrap().as_bytes()).await?;
 
     drop(manifest_file);
     drop(manifest_meta);

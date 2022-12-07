@@ -35,11 +35,11 @@ impl RegistryPathsHelper {
     }
 }
 
-pub fn reject_invalid_refrence_names<'a>(container_ref: &'a str) -> Result<(), RegistryHttpError> {
+pub fn reject_invalid_refrence_names(container_ref: &str) -> Result<(), RegistryHttpError> {
     if container_ref.contains("..") {
         Err(RegistryHttpError::InvalidRepositoryName(container_ref.to_string()))
     } else if container_ref.is_empty() {
-        Err(RegistryHttpError::InvalidRepositoryName(container_ref.to_string()))
+        Err(RegistryHttpError::InvalidRepositoryName("<empty name>".to_string()))
     } else {
         Ok(())
     }
