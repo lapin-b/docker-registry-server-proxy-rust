@@ -1,5 +1,5 @@
 use axum::{response::{Response, IntoResponse}, http::StatusCode};
-use tracing::error;
+use tracing::{error, log::warn};
 use crate::data::json_registry_error::RegistryJsonErrorReprWrapper;
 
 pub mod base;
@@ -17,16 +17,19 @@ pub enum RegistryHttpError {
     #[allow(dead_code)]
     #[error("Invalid tag name {0}")]
     InvalidTagName(String),
-    
+
     #[error("Invalid hash format {0}")]
     InvalidHashFormat(String),
-    
+
     #[error("Upload ID {0} not found or invalid")]
     UploadIdNotFound(String),
-    
+
     // #[error("Multiple registry errors: {0:?}")]
     // MultipleErrors(Vec<Self>),
-    
+
+    #[error("Manifest {manifest} in layer {container} not found")]
+    ManifestNotFound { container: String, manifest: String },
+
     #[error("Internal server error: {0}")]
     RegistryInternalError(eyre::Report),
 }
@@ -45,10 +48,14 @@ impl RegistryHttpError {
     registry_error_constructor!(invalid_tag_name, InvalidTagName);
     registry_error_constructor!(invalid_hash_format, InvalidHashFormat);
     registry_error_constructor!(upload_id_not_found, UploadIdNotFound);
+    pub fn manifest_not_found<C: ToString, M: ToString>(container: C, manifest_ref: M) -> Self {
+        Self::ManifestNotFound { container: container.to_string(), manifest: manifest_ref.to_string() }
+    }
 }
 
 impl IntoResponse for RegistryHttpError {
     fn into_response(self) -> Response {
+        warn!("HTTP error: {:?}", self);
         let (http_code, registry_error) = match self {
             RegistryHttpError::InvalidRepositoryName(_) => (StatusCode::BAD_REQUEST, "NAME_INVALID"),
             RegistryHttpError::InvalidTagName(_) => (StatusCode::BAD_REQUEST, "TAG_INVALID"),
@@ -58,6 +65,7 @@ impl IntoResponse for RegistryHttpError {
                 error!("Internal server error: {:#?}", report);
                 (StatusCode::INTERNAL_SERVER_ERROR, "UNKNOWN")
             },
+            RegistryHttpError::ManifestNotFound {..} => (StatusCode::NOT_FOUND, "NAME_UNKNOWN"),
             // RegistryHttpError::MultipleErrors(_) => (StatusCode::BAD_REQUEST, ""),
         };
 
@@ -65,11 +73,12 @@ impl IntoResponse for RegistryHttpError {
             // RegistryHttpError::MultipleErrors(errors) => {
                 // RegistryJsonErrorReprWrapper::multiple(errors.as_slice())
             // }
-            RegistryHttpError::InvalidRepositoryName(error) => RegistryJsonErrorReprWrapper::single(registry_error, error, ""),
-            RegistryHttpError::InvalidTagName(error) => RegistryJsonErrorReprWrapper::single(registry_error, error, ""),
-            RegistryHttpError::InvalidHashFormat(error) => RegistryJsonErrorReprWrapper::single(registry_error, error, ""),
-            RegistryHttpError::UploadIdNotFound(error) => RegistryJsonErrorReprWrapper::single(registry_error, error, ""),
-            RegistryHttpError::RegistryInternalError(error) => RegistryJsonErrorReprWrapper::single(registry_error, error, ""),
+            RegistryHttpError::InvalidRepositoryName(_) => RegistryJsonErrorReprWrapper::single(registry_error, self.to_string(), ""),
+            RegistryHttpError::InvalidTagName(_) => RegistryJsonErrorReprWrapper::single(registry_error, self.to_string(), ""),
+            RegistryHttpError::InvalidHashFormat(_) => RegistryJsonErrorReprWrapper::single(registry_error, self.to_string(), ""),
+            RegistryHttpError::UploadIdNotFound(_) => RegistryJsonErrorReprWrapper::single(registry_error, self.to_string(), ""),
+            RegistryHttpError::RegistryInternalError(_) => RegistryJsonErrorReprWrapper::single(registry_error, self.to_string(), ""),
+            RegistryHttpError::ManifestNotFound {..} => RegistryJsonErrorReprWrapper::single(registry_error, self.to_string(), "")
         };
 
         let body = serde_json::to_string_pretty(&json_representaiton).unwrap();

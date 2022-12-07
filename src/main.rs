@@ -60,7 +60,11 @@ async fn main() -> eyre::Result<()> {
                 .delete(controllers::uploads::delete_upload)
         )
         .route("/v2/:container_ref/blobs/:digest", head(controllers::blobs::check_blob_exists))
-        .route("/v2/:container_ref/manifests/:reference", put(controllers::manifests::upload_manifest))
+        .route(
+            "/v2/:container_ref/manifests/:reference", 
+            get(controllers::manifests::fetch_manifest)
+                .put(controllers::manifests::upload_manifest)
+        )
         .with_state(application_state)
         /*
         Routes remaining/http/0.2.8/http/request/struct.Request.html

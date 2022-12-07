@@ -1,4 +1,4 @@
-use axum::{response::IntoResponse, extract::{Path, BodyStream, State}, TypedHeader, headers, http::StatusCode};
+use axum::{response::IntoResponse, extract::{Path, BodyStream, State}, TypedHeader, headers, http::StatusCode, body::StreamBody};
 use futures_util::StreamExt;
 use serde::{Serialize, Deserialize};
 use tokio::io::AsyncWriteExt;
@@ -6,6 +6,8 @@ use tracing::info;
 
 use crate::{data::helpers::{reject_invalid_container_refs, RegistryPathsHelper, reject_invalid_tags_refs}, ApplicationState};
 use crate::controllers::RegistryHttpResult;
+
+use super::RegistryHttpError;
 
 #[derive(Serialize, Deserialize)]
 pub struct ManifestMetadata {
@@ -53,5 +55,39 @@ pub async fn upload_manifest(
             ("Location", format!("/v2/{}/manifests/{}", container_ref, manifest_ref)),
             ("Docker-Content-Digest", format!("sha256:{}", manifest_sha256))
         ]
+    ).into_response())
+}
+
+#[tracing::instrument(skip_all)]
+pub async fn fetch_manifest(
+    Path((container_ref, manifest_ref)): Path<(String, String)>,
+    State(app): State<ApplicationState>
+) -> RegistryHttpResult {
+    reject_invalid_container_refs(&container_ref)?;
+    reject_invalid_tags_refs(&manifest_ref)?;
+
+    let manifest_path = RegistryPathsHelper::manifest_path(&app.conf.registry_storage, &container_ref, &manifest_ref);
+    let manifest_file = match tokio::fs::File::open(&manifest_path).await {
+        Ok(f) => f,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            return Err(RegistryHttpError::manifest_not_found(&container_ref, &manifest_ref));
+        }
+        Err(e) => return Err(e.into())
+    };
+
+    let manifest_meta_path = RegistryPathsHelper::manifest_meta(&app.conf.registry_storage, &container_ref, &manifest_ref);
+    let manifest_meta = tokio::fs::read_to_string(&manifest_meta_path).await?;
+    let manifest_meta = serde_json::from_str::<ManifestMetadata>(&manifest_meta).unwrap();
+
+    let manifest_sha256 = sha256::try_digest(manifest_path.as_path())?;
+    let manifest_stream = StreamBody::new(tokio_util::io::ReaderStream::new(manifest_file));
+
+    Ok((
+        StatusCode::OK,
+        [
+            ("Docker-Content-Digest", manifest_sha256),
+            ("Content-Type", manifest_meta.content_type)
+        ],
+        manifest_stream
     ).into_response())
 }

@@ -8,6 +8,7 @@ edition = "2021"
 [dependencies]
 # Serveur HTTP
 tokio = { version = "1.22.0", features = ["full", "macros"] }
+tokio-util = { version = "0.7.4", features = ["io"] }
 axum = { version = "0.6.1", features = ["macros", "headers"] }
 tower-http = { version = "0.3.5", features = ["trace"] }
 tower = "0.4.13"
