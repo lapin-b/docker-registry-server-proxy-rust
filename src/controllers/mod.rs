@@ -5,6 +5,7 @@ use crate::data::json_registry_error::RegistryJsonErrorReprWrapper;
 pub mod base;
 pub mod blobs;
 pub mod manifests;
+pub mod uploads;
 
 pub type RegistryHttpResult = Result<Response, RegistryHttpError>;
 

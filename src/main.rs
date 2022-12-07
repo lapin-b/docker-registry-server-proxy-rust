@@ -52,11 +52,11 @@ async fn main() -> eyre::Result<()> {
     let app = Router::new()
         .route("/", get(controllers::base::root))
         .route("/v2/", get(controllers::base::registry_base))
-        .route("/v2/:container_ref/blobs/uploads/", post(controllers::blobs::initiate_upload))
+        .route("/v2/:container_ref/blobs/uploads/", post(controllers::uploads::initiate_upload))
         .route(
             "/v2/:container_ref/blobs/uploads/:uuid", 
-            patch(controllers::blobs::process_blob_chunk_upload)
-                .put(controllers::blobs::finalize_blob_upload)
+            patch(controllers::uploads::process_blob_chunk_upload)
+                .put(controllers::uploads::finalize_blob_upload)
         )
         .route("/v2/:container_ref/blobs/:digest", head(controllers::blobs::check_blob_exists))
         .route("/v2/:container_ref/manifests/:reference", put(controllers::manifests::upload_manifest))
@@ -78,7 +78,7 @@ async fn main() -> eyre::Result<()> {
     let url_rewrite_layer = axum::middleware::from_fn(requests::rewrite_container_part_url);
     let app_with_rewrite = url_rewrite_layer.layer(app);
 
-    let addr = SocketAddr::from_str("127.0.0.1:8000").unwrap();
+    let addr = SocketAddr::from_str("0.0.0.0:8000").unwrap();
     println!("Listen port 8000");
     axum::Server::bind(&addr)
         .serve(app_with_rewrite.into_make_service())
