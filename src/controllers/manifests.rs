@@ -6,7 +6,7 @@ use serde::{Serialize, Deserialize};
 use tokio::io::AsyncWriteExt;
 use tracing::info;
 
-use crate::{data::helpers::{reject_invalid_container_refs, RegistryPathsHelper, reject_invalid_tags_refs, self}, ApplicationState};
+use crate::{data::{helpers::{reject_invalid_container_refs, RegistryPathsHelper, reject_invalid_tags_refs, self}, manifests::Manifest}, ApplicationState};
 use crate::controllers::RegistryHttpResult;
 
 use super::RegistryHttpError;
@@ -26,36 +26,23 @@ pub async fn upload_manifest(
     reject_invalid_container_refs(&container_ref)?;
     reject_invalid_tags_refs(&manifest_ref)?;
 
-    let manifest_path = RegistryPathsHelper::manifest_path(&app.conf.registry_storage, &container_ref, &manifest_ref);
-    let manifest_meta_path = RegistryPathsHelper::manifest_meta(&app.conf.registry_storage, &container_ref, &manifest_ref);
+    let mut manifest = Manifest::new(
+        &app.conf.registry_storage, 
+        &app.conf.temporary_registry_storage,
+        &container_ref, 
+        &manifest_ref
+    );
 
-    tokio::fs::create_dir_all(manifest_path.parent().unwrap()).await?;
-    tokio::fs::create_dir_all(manifest_meta_path.parent().unwrap()).await?;
-
-    info!("Writing manifest to {:?}", manifest_path);
-    let mut manifest_file = tokio::fs::File::create(&manifest_path).await?;
-    while let Some(chunk) = body.next().await {
-        let chunk = chunk?;
-        manifest_file.write_all(&chunk).await?;
-    }
-
-    info!("Writing manifest metadata to {:?}", manifest_meta_path);
-    let manifest_meta = ManifestMetadata { content_type: content_type.to_string() };
-    let mut manifest_meta_file = tokio::fs::File::create(&manifest_meta_path).await?;
-    manifest_meta_file.write_all(serde_json::to_string_pretty(&manifest_meta).unwrap().as_bytes()).await?;
-
-    let manifest_sha256 = helpers::file256sum_async(manifest_path.clone()).await??;
-    info!("Copying to hash references to enable pull by hash");
-    let hash_manifest_path = RegistryPathsHelper::manifest_path(&app.conf.registry_storage, &container_ref, &format!("sha256:{}", manifest_sha256));
-    let hash_manifest_meta_path = RegistryPathsHelper::manifest_meta(&app.conf.registry_storage, &container_ref, &format!("sha256:{}", manifest_sha256));
-    tokio::fs::copy(&manifest_path, &hash_manifest_path).await?;
-    tokio::fs::copy(&manifest_meta_path, &hash_manifest_meta_path).await?;
+    info!("Saving manifest");
+    manifest.save_manifest(&mut body).await?;
+    info!("Saving metadata");
+    manifest.save_manifest_metadata(&content_type.to_string()).await?;
 
     Ok((
         StatusCode::CREATED,
         [
             ("Location", format!("/v2/{}/manifests/{}", container_ref, manifest_ref)),
-            ("Docker-Content-Digest", format!("sha256:{}", manifest_sha256))
+            ("Docker-Content-Digest", format!("sha256:{}", manifest.docker_hash()?))
         ]
     ).into_response())
 }
