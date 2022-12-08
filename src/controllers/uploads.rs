@@ -111,7 +111,7 @@ pub async fn finalize_blob_upload(
 
     let upload = upload_lock.read().await;
     upload.write_blob(&mut layer).await?;
-    upload.finalize_upload(&hash).await?;
+    upload.finalize_upload(hash).await?;
 
     let upload_id = upload.id;
     app.uploads.delete_upload(upload_id).await;

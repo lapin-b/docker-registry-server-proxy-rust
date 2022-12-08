@@ -73,7 +73,7 @@ impl Upload {
 
     pub async fn finalize_upload(&self, hash: &str) -> std::io::Result<()> {
         // Move this blob to its final resting place.
-        let final_blob_path = RegistryPathsHelper::blob_path(&self.registry_root, &self.container_reference, &hash);
+        let final_blob_path = RegistryPathsHelper::blob_path(&self.registry_root, &self.container_reference, hash);
         let blob_parent = final_blob_path.parent().unwrap();
         if !blob_parent.is_dir() {
             tokio::fs::create_dir_all(blob_parent).await?;

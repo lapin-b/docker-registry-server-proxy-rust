@@ -74,7 +74,7 @@ impl Manifest {
         }
 
         let manifest_metadata = ManifestMetadata {
-            hash: &docker_hash,
+            hash: docker_hash,
             content_type,
         };
 

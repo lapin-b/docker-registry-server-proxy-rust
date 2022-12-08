@@ -38,7 +38,7 @@ impl RegistryPathsHelper {
 
 pub fn reject_invalid_container_refs(container_ref: &str) -> Result<(), RegistryHttpError> {
     if !ref_is_valid(container_ref) {
-        Err(RegistryHttpError::invalid_repository_name(&container_ref))
+        Err(RegistryHttpError::invalid_repository_name(container_ref))
     } else{
         Ok(())
     }
@@ -46,7 +46,7 @@ pub fn reject_invalid_container_refs(container_ref: &str) -> Result<(), Registry
 
 pub fn reject_invalid_tags_refs(tag: &str) -> Result<(), RegistryHttpError> {
     if !ref_is_valid(tag) {
-        Err(RegistryHttpError::invalid_tag_name(&tag))
+        Err(RegistryHttpError::invalid_tag_name(tag))
     } else{
         Ok(())
     }
