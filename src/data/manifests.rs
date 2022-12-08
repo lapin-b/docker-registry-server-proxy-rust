@@ -10,7 +10,7 @@ use uuid::Uuid;
 use super::helpers::{RegistryPathsHelper, file256sum_async};
 
 #[derive(Serialize, Deserialize)]
-struct ManifestMetadata<'a> {
+pub struct ManifestMetadata<'a> {
     pub hash: &'a str,
     pub content_type: &'a str,
 }

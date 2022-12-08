@@ -1,20 +1,12 @@
 use std::os::unix::prelude::MetadataExt;
 
 use axum::{response::IntoResponse, extract::{Path, BodyStream, State}, TypedHeader, headers, http::StatusCode, body::StreamBody};
-use futures_util::StreamExt;
-use serde::{Serialize, Deserialize};
-use tokio::io::AsyncWriteExt;
 use tracing::info;
 
-use crate::{data::{helpers::{reject_invalid_container_refs, RegistryPathsHelper, reject_invalid_tags_refs, self}, manifests::Manifest}, ApplicationState};
+use crate::{data::{helpers::{reject_invalid_container_refs, RegistryPathsHelper, reject_invalid_tags_refs}, manifests::{Manifest, ManifestMetadata}}, ApplicationState};
 use crate::controllers::RegistryHttpResult;
 
 use super::RegistryHttpError;
-
-#[derive(Serialize, Deserialize)]
-pub struct ManifestMetadata {
-    content_type: String
-}
 
 #[tracing::instrument(skip_all, fields(container_ref = container_ref, manifest_ref = manifest_ref))]
 pub async fn upload_manifest(
@@ -69,14 +61,13 @@ pub async fn fetch_manifest(
     let manifest_meta = tokio::fs::read_to_string(&manifest_meta_path).await?;
     let manifest_meta = serde_json::from_str::<ManifestMetadata>(&manifest_meta).unwrap();
 
-    let manifest_sha256 = helpers::file256sum_async(manifest_path).await??;
     let manifest_stream = StreamBody::new(tokio_util::io::ReaderStream::new(manifest_file));
 
     Ok((
         StatusCode::OK,
         [
-            ("Docker-Content-Digest", format!("sha256:{}", manifest_sha256)),
-            ("Content-Type", manifest_meta.content_type),
+            ("Docker-Content-Digest", format!("sha256:{}", manifest_meta.hash)),
+            ("Content-Type", manifest_meta.content_type.to_string()),
             ("Content-Length", manifest_size.to_string())
         ],
         manifest_stream
