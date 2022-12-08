@@ -1,13 +1,8 @@
-use std::io::{self, SeekFrom};
-
 use axum::{http::StatusCode, extract::{Path, State, Query, BodyStream}, response::IntoResponse};
-use eyre::ContextCompat;
-use futures_util::StreamExt;
 use serde::Deserialize;
-use tokio::io::{AsyncSeekExt, AsyncWriteExt};
 use tracing::info;
 
-use crate::{data::helpers::{reject_invalid_container_refs, RegistryPathsHelper}, ApplicationState};
+use crate::{data::helpers::{reject_invalid_container_refs}, ApplicationState};
 use crate::controllers::RegistryHttpResult;
 
 use super::RegistryHttpError;
@@ -29,11 +24,14 @@ pub async fn initiate_upload(
         return Ok((StatusCode::NOT_IMPLEMENTED).into_response());
     }
 
-    let upload_lock = application.uploads.create_upload(&container_ref, &application.conf.temporary_registry_storage).await;
+    let upload_lock = application.uploads.create_upload(
+        &container_ref, &application.conf.temporary_registry_storage,
+        &application.conf.registry_storage
+    ).await;
     let upload = upload_lock.read().await;
     info!("Initiating upload for [{}] blob {}", container_ref, upload.id);
 
-    upload.create_containing_directory().await?;
+    upload.create_parent_directory().await?;
 
     Ok((
         StatusCode::ACCEPTED,
@@ -60,7 +58,7 @@ pub async fn delete_upload(
     let upload = upload_lock.read().await;
 
     // Check container ref then remove
-    upload.remove_temporary_file().await?;
+    upload.cleanup_upload().await?;
     app.uploads.delete_upload(upload.id).await;
 
     Ok((StatusCode::NO_CONTENT, "").into_response())
@@ -80,15 +78,7 @@ pub async fn process_blob_chunk_upload(
         .ok_or_else(|| RegistryHttpError::upload_id_not_found(&raw_upload_uuid))?;
 
     let upload = upload_lock.read().await;
-    let mut file = upload.create_or_open_upload_file().await?;
-    file.seek(io::SeekFrom::End(0)).await.unwrap();
-
-    while let Some(chunk) = layer.next().await {
-        let chunk = chunk?;
-        file.write_all(&chunk).await?;
-    }
-
-    let seek_position = file.stream_position().await?;
+    let seek_position = upload.write_blob(&mut layer).await?;
 
     Ok((
         StatusCode::ACCEPTED,
@@ -120,26 +110,8 @@ pub async fn finalize_blob_upload(
         .ok_or_else(|| RegistryHttpError::upload_id_not_found(&raw_upload_uuid))?;
 
     let upload = upload_lock.read().await;
-
-    let mut file = upload.create_or_open_upload_file().await?;
-    file.seek(SeekFrom::End(0)).await?;
-    while let Some(chunk) = layer.next().await {
-        let chunk = chunk?;
-        file.write_all(&chunk).await?;
-    }
-
-    // Enf of upload, close the file and move it to its resting place
-    drop(file);
-
-    let blob_file_path = RegistryPathsHelper::blob_path(
-        &app.conf.registry_storage,
-        &container_ref,
-        hash
-    );
-
-    let parent = blob_file_path.parent().context("No parent to a constructed path ?")?;
-    tokio::fs::create_dir_all(parent).await?;
-    tokio::fs::rename(&upload.temporary_file_path, &blob_file_path).await?;
+    upload.write_blob(&mut layer).await?;
+    upload.finalize_upload(&hash).await?;
 
     let upload_id = upload.id;
     app.uploads.delete_upload(upload_id).await;
