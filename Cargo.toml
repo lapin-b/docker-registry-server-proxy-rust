@@ -1,12 +1,14 @@
 [package]
-name = "pull_registry_attempt"
+name = "docker_storage_proxy_registry"
 version = "0.1.0"
 edition = "2021"
+authors = ["Mathias B. <contact@l4p1n.ch>"]
+license = "Apache-2.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-# Serveur HTTP
+# HTTP server
 tokio = { version = "1.22.0", features = ["full", "macros"] }
 tokio-util = { version = "0.7.4", features = ["io"] }
 axum = { version = "0.6.1", features = ["macros", "headers"] }
@@ -19,7 +21,7 @@ sha2 = "0.10.6"
 base16ct = { version = "0.1.1", features = ["alloc"] }
 thiserror = "1.0.37"
 
-# Envoi des layers Docker
+# Sending Docker layers
 uuid = { version = "1.2.2", features = ["v4"]}
 
 # Logging
@@ -27,10 +29,12 @@ tracing = "0.1.37"
 tracing-subscriber = { version = "0.3.16", features = ["env-filter"] }
 eyre = "0.6.8"
 
-# Ser-de
+# Serde
 serde = { version = "1.0.149", features = ["derive"] }
 serde_json = "1.0.89"
 toml = "0.5.9"
 
+# Make sure that the sha2 package is always compiled with optimizations
+# enabled. If compiled in debug, hashing something is VERY slow.
 [profile.dev.package.sha2]
 opt-level = 3
