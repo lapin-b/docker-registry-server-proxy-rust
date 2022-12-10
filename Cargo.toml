@@ -21,6 +21,10 @@ sha2 = "0.10.6"
 base16ct = { version = "0.1.1", features = ["alloc"] }
 thiserror = "1.0.37"
 
+# HTTP docker client
+reqwest = { version = "0.11", features = ["json"] }
+url = "2.3.1"
+
 # Sending Docker layers
 uuid = { version = "1.2.2", features = ["v4"]}
 
