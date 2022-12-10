@@ -112,3 +112,4 @@ impl_from!(axum::Error);
 impl_from!(tokio::task::JoinError);
 impl_from!(eyre::Report);
 impl_from!(docker_client::client::DockerClientError);
+impl_from!(reqwest::Error);

@@ -6,5 +6,6 @@ pub struct ProxyManifestResponse {
     // pub manifest_ref: String,
     pub hash: String,
     pub content_type: String,
+    pub content_length: u32,
     pub raw_response: reqwest::Response
 }

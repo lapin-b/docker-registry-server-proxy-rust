@@ -145,14 +145,21 @@ impl DockerClient {
                 .get("Docker-Content-Digest")
                 .ok_or(DockerClientError::MissingProxyHeader("Docker-Content-Digest".to_string()))?
                 .to_str()
-                .expect("Valid UTF-8 in header content")
+                .expect("Invalid UTF-8 in header content")
                 .to_string(),
             content_type: response.headers()
                 .get("Content-Type")
                 .ok_or(DockerClientError::MissingProxyHeader("Content-Type".to_string()))?
                 .to_str()
-                .expect("Valid UTF-8 in header content")
+                .expect("Invalid UTF-8 in header content")
                 .to_string(),
+            content_length: response.headers()
+                .get("Content-Length")
+                .ok_or(DockerClientError::MissingProxyHeader("Content-Length".to_string()))?
+                .to_str()
+                .expect("Invalid UTF-8 in header content")
+                .parse()
+                .expect("Content length is not a number"),
             raw_response: response,
         })
     }
