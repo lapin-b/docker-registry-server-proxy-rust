@@ -33,7 +33,7 @@ async fn main() -> eyre::Result<()> {
     tracing_subscriber::registry()
         .with(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "info,tower_http=debug,pull_registry_attempt=debug".into())
+                .unwrap_or_else(|_| "info,tower_http=debug,docker_storage_proxy_registry=debug".into())
         )
         .with(tracing_subscriber::fmt::layer())
         .init();
