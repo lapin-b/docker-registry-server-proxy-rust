@@ -24,6 +24,11 @@ temporary_registry_storage = "storage/_tmp"
 proxy_storage = "storage/proxy"
 ```
 
+## A few words on the container proxy
+If proxying containers, you **must** give the registry the **whole** path to reach the container, especially for containers from the DockerHub. Otherwise, you may end up with issues regarding DNS not resolving addresses.
+
+For example, if you want to reference `hello-world:latest` from the DockerHub, you must reference it with `registry-1.docker.io/library/hello-world:latest`. The whole URL will look like `<your registry>/proxy/registry-1.docker.io/library/hello-world:latest`. It's longwinded, but in the interest of keeping things simple with regular expressions, this will do. Containers from other registries are not affected since you must refer to them by the whole path anyway.
+
 ## License
 Copyright 2022 Mathias B. <contact@l4p1n.ch>
 
