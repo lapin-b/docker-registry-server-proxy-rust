@@ -3,7 +3,7 @@ use once_cell::sync::Lazy;
 use regex::{Regex, Captures};
 
 static REPLACE_REGEX: Lazy<Regex> = Lazy::new(|| {
-    regex::Regex::new("^/v2/(?P<isProxy>proxy/)?(?P<containerRef>[a-zA-Z0-9-/<>]+)/(?P<object>blobs|manifests|tags)(?P<rest>/.*)?$")
+    regex::Regex::new("^/v2/(?P<isProxy>proxy/)?(?P<containerRef>[a-zA-Z0-9-/.]+)/(?P<object>blobs|manifests|tags)(?P<rest>/.*)?$")
         .unwrap()
 });
 

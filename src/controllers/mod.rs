@@ -1,6 +1,6 @@
 use axum::{response::{Response, IntoResponse}, http::StatusCode};
 use tracing::{error, log::warn};
-use crate::data::json_registry_error::RegistryJsonErrorReprWrapper;
+use crate::{data::json_registry_error::RegistryJsonErrorReprWrapper, docker_client};
 
 pub mod base;
 pub mod blobs;
@@ -111,3 +111,4 @@ impl_from!(std::io::Error);
 impl_from!(axum::Error);
 impl_from!(tokio::task::JoinError);
 impl_from!(eyre::Report);
+impl_from!(docker_client::client::DockerClientError);

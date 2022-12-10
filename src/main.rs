@@ -2,6 +2,7 @@ mod configuration;
 mod controllers;
 mod requests;
 mod data;
+mod docker_client;
 
 use std::net::SocketAddr;
 use std::str::FromStr;
@@ -52,7 +53,10 @@ async fn main() -> eyre::Result<()> {
     let app = Router::new()
         .route("/", get(controllers::base::root))
         .route("/v2/", get(controllers::base::registry_base))
-        .route("/v2/:container_ref/blobs/uploads/", post(controllers::uploads::initiate_upload))
+        .route(
+            "/v2/:container_ref/blobs/uploads/", 
+            post(controllers::uploads::initiate_upload)
+        )
         .route(
             "/v2/:container_ref/blobs/uploads/:uuid", 
             patch(controllers::uploads::process_blob_chunk_upload)
@@ -68,6 +72,10 @@ async fn main() -> eyre::Result<()> {
             "/v2/:container_ref/manifests/:reference", 
             get(controllers::manifests::fetch_manifest)
                 .put(controllers::manifests::upload_manifest)
+        )
+        .route(
+            "/v2/proxy/:container_ref/manifests/:reference",
+            get(controllers::manifests::proxy_fetch_manifest)
         )
         .with_state(application_state)
         .layer(TraceLayer::new_for_http());
