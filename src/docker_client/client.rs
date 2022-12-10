@@ -1,9 +1,9 @@
 use std::{str::FromStr};
 
-use reqwest::RequestBuilder;
+use reqwest::{RequestBuilder, Response, IntoUrl, Method};
 use tracing::{info, warn};
 
-use crate::docker_client::{www_authenticate::AuthenticationChallenge, authentication_strategies::{AnonymousAuthStrategy, HttpBasicAuthStrategy, BearerTokenAuthStrategy}};
+use crate::docker_client::{www_authenticate::AuthenticationChallenge, authentication_strategies::{AnonymousAuthStrategy, HttpBasicAuthStrategy, BearerTokenAuthStrategy}, client_responses::ProxyManifestResponse};
 
 use super::{www_authenticate::WwwAuthenticateError, authentication_strategies::AuthenticationStrategy};
 
@@ -12,11 +12,17 @@ pub enum DockerClientError {
     #[error("Unexpected status code {0}")]
     UnexpectedStatusCode(u16),
 
+    #[error("Missing header {0} from the proxied registry")]
+    MissingProxyHeader(String),
+
     #[error("Provided credentials are errorneous or unable to be provided when requested")]
     BadAuthenticationCredentials,
 
     #[error(transparent)]
     WwwAuthenticateParseError(#[from] WwwAuthenticateError),
+
+    #[error("Authentication has not been initialized yet")]
+    UninitiatedAuthentication,
 
     #[error(transparent)]
     ReqwestError(#[from] reqwest::Error)
@@ -93,8 +99,8 @@ impl DockerClient {
         };
 
         auth_strategy.execute_authentication(
-            &self.http_client, auth_challenge.authentication_parameters(), 
-            registry_username, 
+            &self.http_client, auth_challenge.authentication_parameters(),
+            registry_username,
             registry_password
         ).await?;
 
@@ -120,11 +126,47 @@ impl DockerClient {
         Ok(())
     }
 
+    pub async fn query_manifest(&self, manifest_ref: &str, query_head: bool) -> Result<ProxyManifestResponse, DockerClientError> {
+        let response = self.create_request(
+            if query_head { Method::HEAD } else { Method::GET },
+            format!("https://{}/v2/{}/manifests/{}",
+                self.registry,
+                self.container,
+                manifest_ref
+            )
+        )?.send().await?;
+
+        if response.status() != 200 {
+            return Err(DockerClientError::UnexpectedStatusCode(response.status().as_u16()))
+        }
+
+        Ok(ProxyManifestResponse {
+            hash: response.headers()
+                .get("Docker-Content-Digest")
+                .ok_or(DockerClientError::MissingProxyHeader("Docker-Content-Digest".to_string()))?
+                .to_str()
+                .expect("Valid UTF-8 in header content")
+                .to_string(),
+            content_type: response.headers()
+                .get("Content-Type")
+                .ok_or(DockerClientError::MissingProxyHeader("Content-Type".to_string()))?
+                .to_str()
+                .expect("Valid UTF-8 in header content")
+                .to_string(),
+            raw_response: response,
+        })
+    }
+
     pub fn authentication_needs_revalidation(&self) -> bool {
         match &self.auth_strat {
             Some(strat) => strat.needs_reauthenticating(),
             None => false
         }
+    }
+
+    fn create_request(&self, method: reqwest::Method, url: impl IntoUrl) -> Result<reqwest::RequestBuilder, DockerClientError> {
+        let builder = self.http_client.request(method, url);
+        Ok(self.auth_strat.as_ref().ok_or(DockerClientError::UninitiatedAuthentication)?.inject_authentication(builder))
     }
 
     fn add_authentication(&self, request: RequestBuilder) -> RequestBuilder {

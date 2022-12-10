@@ -1,9 +1,9 @@
 use std::os::unix::prelude::MetadataExt;
 
-use axum::{response::IntoResponse, extract::{Path, BodyStream, State}, TypedHeader, headers, http::StatusCode, body::StreamBody, debug_handler};
+use axum::{response::IntoResponse, extract::{Path, BodyStream, State}, TypedHeader, headers, http::{StatusCode, self}, body::StreamBody, debug_handler};
 use tracing::info;
 
-use crate::{data::{helpers::{reject_invalid_container_refs, RegistryPathsHelper, reject_invalid_tags_refs}, manifests::{Manifest, ManifestMetadata}}, ApplicationState};
+use crate::{data::{helpers::{reject_invalid_container_refs, RegistryPathsHelper, reject_invalid_tags_refs}, manifests::{Manifest, ManifestMetadata}}, ApplicationState, docker_client::client::DockerClientError};
 use crate::controllers::RegistryHttpResult;
 
 use super::RegistryHttpError;
@@ -77,12 +77,34 @@ pub async fn fetch_manifest(
 #[debug_handler]
 pub async fn proxy_fetch_manifest(
     Path((container_ref, manifest_ref)): Path<(String, String)>,
-    State(app): State<ApplicationState>
+    State(app): State<ApplicationState>,
+    http_method: http::Method
 ) -> RegistryHttpResult {
     reject_invalid_container_refs(&container_ref)?;
     reject_invalid_tags_refs(&manifest_ref)?;
 
-    let client = app.docker_clients.get_client(&container_ref).await?;
+    if http_method == http::Method::GET {
+        return Ok(StatusCode::NOT_IMPLEMENTED.into_response());
+    }
 
-    Ok((StatusCode::NOT_IMPLEMENTED).into_response())
+    let client = app.docker_clients.get_client(&container_ref).await?;
+    let manifest_response = client.query_manifest(&manifest_ref, true).await;
+
+    match manifest_response {
+        Ok(proxy_response) => {
+            Ok((
+                StatusCode::OK,
+                [
+                    ("Content-Type", proxy_response.content_type.clone()),
+                    ("Docker-Content-Digest", proxy_response.hash.clone())
+                ]
+            ).into_response())
+        }
+
+        Err(DockerClientError::UnexpectedStatusCode(code)) if code == 404 => {
+            Ok(StatusCode::NOT_FOUND.into_response())
+        }
+
+        Err(e) => return Err(e.into())
+    }
 }
