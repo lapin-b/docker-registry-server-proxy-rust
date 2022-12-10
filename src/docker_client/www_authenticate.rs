@@ -33,12 +33,18 @@ impl<'auth> AuthenticationChallenge<'auth> {
             auth_parameters.insert(capture.name("key").unwrap().as_str(), capture.name("value").unwrap().as_str());
         }
 
-
         match auth_strategy {
             Some(method) if method == "basic" => Ok(AuthenticationChallenge::Basic(auth_parameters)),
             Some(method) if method == "bearer" => Ok(AuthenticationChallenge::Bearer(auth_parameters)),
             Some(method) => Err(WwwAuthenticateError::UnsupportedMethod(method.to_string())),
             None => Err(WwwAuthenticateError::MissingMethod)
+        }
+    }
+
+    pub fn authentication_parameters(&self) -> &HashMap<&'auth str, &'auth str> {
+        match self {
+            AuthenticationChallenge::Basic(ref params) => params,
+            AuthenticationChallenge::Bearer(ref params) => params,
         }
     }
 }

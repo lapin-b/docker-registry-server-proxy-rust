@@ -1,6 +1,6 @@
 use std::os::unix::prelude::MetadataExt;
 
-use axum::{response::IntoResponse, extract::{Path, BodyStream, State}, TypedHeader, headers, http::StatusCode, body::StreamBody};
+use axum::{response::IntoResponse, extract::{Path, BodyStream, State}, TypedHeader, headers, http::StatusCode, body::StreamBody, debug_handler};
 use once_cell::sync::Lazy;
 use regex::Regex;
 use tracing::info;
@@ -80,6 +80,7 @@ pub async fn fetch_manifest(
     ).into_response())
 }
 
+#[debug_handler]
 pub async fn proxy_fetch_manifest(
     Path((container_ref, manifest_ref)): Path<(String, String)>,
     State(app): State<ApplicationState>

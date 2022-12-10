@@ -1,29 +1,19 @@
-use std::{str::FromStr, time::{Instant, Duration}, ops::Add};
+use std::{str::FromStr};
 
 use reqwest::RequestBuilder;
-use serde::Deserialize;
 use tracing::{info, warn};
 
-use crate::docker_client::www_authenticate::AuthenticationChallenge;
+use crate::docker_client::{www_authenticate::AuthenticationChallenge, authentication_strategies::{AnonymousAuthStrategy, HttpBasicAuthStrategy, BearerTokenAuthStrategy}};
 
-use super::www_authenticate::WwwAuthenticateError;
-
-enum AuthenticationType {
-    Basic { username: String, password: Option<String> },
-    Token { scope: String, token: String, expires_at: Instant },
-    Anonymous
-}
+use super::{www_authenticate::WwwAuthenticateError, authentication_strategies::AuthenticationStrategy};
 
 #[derive(thiserror::Error, Debug)]
 pub enum DockerClientError {
     #[error("Unexpected status code {0}")]
     UnexpectedStatusCode(u16),
 
-    #[error("Unsupported authentication method {0}")]
-    UnsupportedAuthenticationMethod(String),
-
-    #[error("Provided HTTP Basic credentials are errorenous or not provided")]
-    BadBasicAuthCredentials,
+    #[error("Provided credentials are errorneous or unable to be provided when requested")]
+    BadAuthenticationCredentials,
 
     #[error(transparent)]
     WwwAuthenticateParseError(#[from] WwwAuthenticateError),
@@ -32,14 +22,8 @@ pub enum DockerClientError {
     ReqwestError(#[from] reqwest::Error)
 }
 
-#[derive(Deserialize)]
-struct BearerToken {
-    token: String,
-    expires_in: Option<u64>
-}
-
 pub struct DockerClient {
-    authentication: Option<AuthenticationType>,
+    auth_strat: Option<Box<dyn AuthenticationStrategy>>,
     registry: String,
     container: String,
     http_client: reqwest::Client
@@ -50,15 +34,15 @@ impl DockerClient {
         let client = reqwest::Client::new();
 
         Self {
-            authentication: None,
+            auth_strat: None,
             registry: registry.to_string(),
             container: container.to_string(),
-            http_client: client
+            http_client: client,
         }
     }
 
     pub async fn authenticate(&mut self, registry_username: Option<&str>, registry_password: Option<&str>) -> Result<(), DockerClientError> {
-        if self.authentication.is_some() {
+        if self.auth_strat.is_some() {
             return Ok(());
         }
 
@@ -71,7 +55,7 @@ impl DockerClient {
         // If the server responds 200 immediately, we'll consider we don't need authentication.
         if base_response.status() == 200 {
             info!("Got 200, assuming repository can be accessed without any credentials");
-            self.authentication = Some(AuthenticationType::Anonymous);
+            self.auth_strat = Some(Box::new(AnonymousAuthStrategy));
             return Ok(());
         }
 
@@ -93,68 +77,34 @@ impl DockerClient {
 
         let auth_challenge = AuthenticationChallenge::from_www_authenticate(&www_authenticate)?;
 
-        match auth_challenge {
-            AuthenticationChallenge::Basic(_params) if registry_username.is_some() => {
+        let mut auth_strategy: Box<dyn AuthenticationStrategy> = match auth_challenge {
+            AuthenticationChallenge::Basic(_) if registry_username.is_some() => {
                 info!("Applying HTTP Basic for registry {}", self.registry);
-
-                self.authentication = Some(
-                    AuthenticationType::Basic {
-                        username: registry_username.unwrap().to_string(),
-                        password: registry_password.map(|p| p.to_string())
-                    }
-                );
-
-                if let Err(auth_err) = self.check_authentication().await {
-                    self.authentication = None;
-                    return Err(auth_err);
-                }
+                Box::new(HttpBasicAuthStrategy::new(registry_username.unwrap(), registry_password))
             },
 
             AuthenticationChallenge::Basic(_) => {
                 warn!("No provided credential for auth method Basic");
-                return Err(DockerClientError::BadBasicAuthCredentials);
+                return Err(DockerClientError::BadAuthenticationCredentials);
             }
 
-            AuthenticationChallenge::Bearer(mut params) => {
-                let scope = format!("repository:{}:pull", self.container);
-                params.insert("scope", &scope);
-
-                let authentication_service = params.get("realm").expect("Who am I supposed to authenticate to ?");
-                let authentication_query_string = params.iter()
-                    .filter(|(key, _)| **key != "realm")
-                    .map(|(k, v)| [*k, *v].join("="))
-                    .collect::<Vec<_>>()
-                    .join("&");
-
-                info!("Attempting to authenticate to {}", authentication_service);
-                let mut token_request = self.http_client.get(format!("{}?{}", authentication_service, authentication_query_string));
-                if let Some(username) = registry_username {
-                    token_request = token_request.basic_auth(username, registry_password);
-                }
-                let response = token_request.send().await?;
-                if response.status() != 200 {
-                    info!("Response is not 200");
-                    return Err(DockerClientError::UnexpectedStatusCode(response.status().as_u16()));
-                }
-                info!("Deserializing 200 response from {}", authentication_service);
-                let token = response.json::<BearerToken>().await?;
-                if token.token.is_empty() || token.token == "unauthenticated" {
-                    return Err(DockerClientError::BadBasicAuthCredentials);
-                }
-                self.authentication = Some(
-                    AuthenticationType::Token { 
-                        scope, 
-                        token: token.token, 
-                        expires_at: Instant::now().add(Duration::from_secs(token.expires_in.unwrap_or(60))) 
-                    }
-                );
-                info!("Checking token");
-                if let Err(err) = self.check_authentication().await {
-                    info!("Apparently, invalid token");
-                    self.authentication = None;
-                    return Err(err);
-                }
+            AuthenticationChallenge::Bearer(_) => {
+                info!("Applying Bearer token authentication for registry {}", self.registry);
+                Box::new(BearerTokenAuthStrategy::new(&self.container))
             }
+        };
+
+        auth_strategy.execute_authentication(
+            &self.http_client, auth_challenge.authentication_parameters(), 
+            registry_username, 
+            registry_password
+        ).await?;
+
+        self.auth_strat = Some(auth_strategy);
+
+        if let Err(auth_error) = self.check_authentication().await {
+            self.auth_strat = None;
+            return Err(auth_error);
         }
 
         Ok(())
@@ -173,17 +123,7 @@ impl DockerClient {
     }
 
     fn add_authentication(&self, request: RequestBuilder) -> RequestBuilder {
-        match self.authentication {
-            Some(AuthenticationType::Basic { ref username, ref password  }) => {
-                request.basic_auth(username, password.clone())
-            },
-
-            Some(AuthenticationType::Token { ref token, .. }) => {
-                request.bearer_auth(token)
-            }
-
-            Some(AuthenticationType::Anonymous) | None => request,
-        }
+        self.auth_strat.as_ref().unwrap().inject_authentication(request)
     }
 
     async fn check_authentication(&self) -> Result<(), DockerClientError>{
@@ -192,7 +132,7 @@ impl DockerClient {
         match response {
             Err(DockerClientError::UnexpectedStatusCode(code)) if code == 401 => {
                 warn!("Invalid credentials");
-                return Err(DockerClientError::BadBasicAuthCredentials);
+                return Err(DockerClientError::BadAuthenticationCredentials);
             },
 
             Err(other_error) => {
