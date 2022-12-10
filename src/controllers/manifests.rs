@@ -1,18 +1,12 @@
 use std::os::unix::prelude::MetadataExt;
 
 use axum::{response::IntoResponse, extract::{Path, BodyStream, State}, TypedHeader, headers, http::StatusCode, body::StreamBody, debug_handler};
-use once_cell::sync::Lazy;
-use regex::Regex;
 use tracing::info;
 
-use crate::{data::{helpers::{reject_invalid_container_refs, RegistryPathsHelper, reject_invalid_tags_refs}, manifests::{Manifest, ManifestMetadata}}, ApplicationState, docker_client};
+use crate::{data::{helpers::{reject_invalid_container_refs, RegistryPathsHelper, reject_invalid_tags_refs}, manifests::{Manifest, ManifestMetadata}}, ApplicationState};
 use crate::controllers::RegistryHttpResult;
 
 use super::RegistryHttpError;
-
-static REGISTRY_CONTAINER_SEPARATION_REGEX: Lazy<Regex> = Lazy::new(|| {
-    Regex::new("(?:(?P<registry>[a-zA-z.]+(?::[0-9]{1,6})?)/)?(?P<container>[a-zA-Z0-9-./]+)").unwrap()
-});
 
 #[tracing::instrument(skip_all, fields(container_ref = container_ref, manifest_ref = manifest_ref))]
 pub async fn upload_manifest(
@@ -88,12 +82,7 @@ pub async fn proxy_fetch_manifest(
     reject_invalid_container_refs(&container_ref)?;
     reject_invalid_tags_refs(&manifest_ref)?;
 
-    let components = REGISTRY_CONTAINER_SEPARATION_REGEX.captures(&container_ref).unwrap();
-    let registry = components.name("registry").map(|r| r.as_str()).unwrap_or("registry-1.docker.io");
-    let container = components.name("container").unwrap().as_str();
-
-    let mut client = docker_client::client::DockerClient::new(registry, container);
-    client.authenticate(None, None).await?;
+    let client = app.docker_clients.get_client(&container_ref).await?;
 
     Ok((StatusCode::NOT_IMPLEMENTED).into_response())
 }

@@ -11,6 +11,7 @@ use axum::Router;
 use axum::extract::FromRef;
 use axum::routing::{get, post, patch};
 use axum::ServiceExt;
+use docker_client::clients_store::DockerClientsStore;
 use tokio::sync::RwLock;
 use tower::Layer;
 use tower_http::trace::TraceLayer;
@@ -25,6 +26,7 @@ pub type UploadsInProgressState = Arc<RwLock<UploadsStore>>;
 #[derive(FromRef, Clone)]
 pub struct ApplicationState {
     conf: Arc<Configuration>,
+    docker_clients: DockerClientsStore,
     uploads: UploadsStore
 }
 
@@ -47,6 +49,7 @@ async fn main() -> eyre::Result<()> {
 
     let application_state = ApplicationState {
         conf: Arc::new(configuration),
+        docker_clients: DockerClientsStore::new(),
         uploads: UploadsStore::new()
     };
 

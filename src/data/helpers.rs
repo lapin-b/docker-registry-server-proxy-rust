@@ -1,9 +1,17 @@
 use std::path::{PathBuf, Path};
 
+use once_cell::sync::Lazy;
+use regex::Regex;
 use sha2::{Sha256, Digest};
 use uuid::Uuid;
 
 use crate::controllers::RegistryHttpError;
+
+static REGISTRY_CONTAINER_SEPARATION_REGEX: Lazy<Regex> = Lazy::new(|| {
+    // The registry part is mandatory, I don't want to deal with "rust:latest"
+    // aliasing to "registry.docker.io/library/rust:latest"
+    Regex::new("(?P<registry>[a-zA-z.]+(?::[0-9]{1,6})?)/(?P<container>[a-zA-Z0-9-./]+)$").unwrap()
+});
 
 pub struct RegistryPathsHelper;
 
@@ -67,6 +75,15 @@ pub fn file256sum_async(path: PathBuf) -> tokio::task::JoinHandle<std::io::Resul
     tokio::task::spawn_blocking(move || {
         file256sum(path.as_path())
     })
+}
+
+pub fn split_registry_and_container(registry_container: &str) -> (&str, &str) {
+    let components = REGISTRY_CONTAINER_SEPARATION_REGEX.captures(&registry_container).unwrap();
+
+    let registry = components.name("registry").unwrap().as_str();
+    let container = components.name("container").unwrap().as_str();
+
+    (registry, container)
 }
 
 fn ref_is_valid(rref: &str) -> bool {

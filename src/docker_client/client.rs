@@ -30,9 +30,7 @@ pub struct DockerClient {
 }
 
 impl DockerClient {
-    pub fn new(registry: &str, container: &str) -> Self {
-        let client = reqwest::Client::new();
-
+    pub fn new(registry: &str, container: &str, client: reqwest::Client) -> Self {
         Self {
             auth_strat: None,
             registry: registry.to_string(),
@@ -120,6 +118,13 @@ impl DockerClient {
         }
 
         Ok(())
+    }
+
+    pub fn authentication_needs_revalidation(&self) -> bool {
+        match &self.auth_strat {
+            Some(strat) => strat.needs_reauthenticating(),
+            None => false
+        }
     }
 
     fn add_authentication(&self, request: RequestBuilder) -> RequestBuilder {
