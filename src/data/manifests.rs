@@ -2,7 +2,7 @@ use std::path::{PathBuf, Path};
 
 use axum::extract::BodyStream;
 use eyre::ContextCompat;
-use futures_util::{StreamExt, stream::BoxStream};
+use futures_util::StreamExt;
 use serde::{Serialize, Deserialize};
 use tokio::io::AsyncWriteExt;
 use uuid::Uuid;
@@ -87,13 +87,13 @@ impl Manifest {
             None => {
                 let docker_hash = file256sum_async(manifest_temporary_file_path.clone()).await??;
                 let docker_hash = format!("sha256:{}", docker_hash);
-                self.docker_hash = Some(docker_hash.clone());
+                self.docker_hash = Some(docker_hash);
                 self.docker_hash.as_ref().unwrap()
             }
         };
 
         // Paths for the manifest hash file and its named tag.
-        let manifest_hash_path = RegistryPathsHelper::manifest_path(&self.registry_root, &self.container_ref, &docker_hash);
+        let manifest_hash_path = RegistryPathsHelper::manifest_path(&self.registry_root, &self.container_ref, docker_hash);
         let manifest_hash_parent = manifest_hash_path.parent().unwrap();
         if !manifest_hash_parent.is_dir() {
             tokio::fs::create_dir_all(&manifest_hash_parent).await?;
@@ -118,7 +118,7 @@ impl Manifest {
     pub async fn save_manifest_metadata(&self, content_type: &str) -> eyre::Result<()> {
         let docker_hash = self.docker_hash.as_ref().context("Docker container hash has not been yet calculated")?;
 
-        let manifest_metadata_hash_path = RegistryPathsHelper::manifest_meta(&self.registry_root, &self.container_ref, &docker_hash);
+        let manifest_metadata_hash_path = RegistryPathsHelper::manifest_meta(&self.registry_root, &self.container_ref, docker_hash);
         let manifest_metadata_parent = manifest_metadata_hash_path.parent().unwrap();
         if !manifest_metadata_parent.is_dir() {
             tokio::fs::create_dir_all(&manifest_metadata_parent).await?;

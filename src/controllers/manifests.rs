@@ -1,11 +1,11 @@
 use std::os::unix::prelude::MetadataExt;
 
-use axum::{response::IntoResponse, extract::{Path, BodyStream, State}, TypedHeader, headers, http::{StatusCode, self}, body::{StreamBody, BoxBody}, debug_handler};
-use tokio::io::AsyncWriteExt;
-use tokio_util::io::ReaderStream;
-use tracing::{info, warn, debug};
+use axum::{response::IntoResponse, extract::{Path, BodyStream, State}, TypedHeader, headers, http::StatusCode, body::StreamBody};
 
-use crate::{data::{helpers::{reject_invalid_container_refs, RegistryPathsHelper, reject_invalid_tags_refs}, manifests::{Manifest, ManifestMetadata, ManifestContentSources}}, ApplicationState, docker_client::client::DockerClientError};
+use tokio_util::io::ReaderStream;
+use tracing::{info, warn};
+
+use crate::{data::{helpers::{reject_invalid_container_refs, RegistryPathsHelper, reject_invalid_tags_refs}, manifests::{Manifest, ManifestMetadata}}, ApplicationState, docker_client::client::DockerClientError};
 use crate::controllers::RegistryHttpResult;
 
 use super::RegistryHttpError;

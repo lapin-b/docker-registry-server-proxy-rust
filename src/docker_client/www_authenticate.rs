@@ -25,7 +25,7 @@ impl<'auth> AuthenticationChallenge<'auth> {
         let mut auth_strategy = None;
         let mut auth_parameters = HashMap::new();
 
-        for capture in WWW_AUTHENTICATE_HEADER_REGEX.captures_iter(&header_value) {
+        for capture in WWW_AUTHENTICATE_HEADER_REGEX.captures_iter(header_value) {
             if let Some(method) = capture.name("method") {
                 auth_strategy = Some(method.as_str().to_lowercase());
             }
@@ -36,7 +36,7 @@ impl<'auth> AuthenticationChallenge<'auth> {
         match auth_strategy {
             Some(method) if method == "basic" => Ok(AuthenticationChallenge::Basic(auth_parameters)),
             Some(method) if method == "bearer" => Ok(AuthenticationChallenge::Bearer(auth_parameters)),
-            Some(method) => Err(WwwAuthenticateError::UnsupportedMethod(method.to_string())),
+            Some(method) => Err(WwwAuthenticateError::UnsupportedMethod(method)),
             None => Err(WwwAuthenticateError::MissingMethod)
         }
     }

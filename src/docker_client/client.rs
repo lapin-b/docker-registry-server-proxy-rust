@@ -1,6 +1,6 @@
-use std::{str::FromStr};
+use std::str::FromStr;
 
-use reqwest::{RequestBuilder, Response, IntoUrl, Method};
+use reqwest::{RequestBuilder, IntoUrl, Method};
 use tracing::{info, warn};
 
 use crate::docker_client::{www_authenticate::AuthenticationChallenge, authentication_strategies::{AnonymousAuthStrategy, HttpBasicAuthStrategy, BearerTokenAuthStrategy}, client_responses::ProxyManifestResponse};
@@ -79,7 +79,7 @@ impl DockerClient {
             .expect("The header should contain only UTF8 characters");
         info!("Got authentication challenge header [{}]", www_authenticate);
 
-        let auth_challenge = AuthenticationChallenge::from_www_authenticate(&www_authenticate)?;
+        let auth_challenge = AuthenticationChallenge::from_www_authenticate(www_authenticate)?;
 
         let mut auth_strategy: Box<dyn AuthenticationStrategy> = match auth_challenge {
             AuthenticationChallenge::Basic(_) if registry_username.is_some() => {
@@ -186,17 +186,17 @@ impl DockerClient {
         match response {
             Err(DockerClientError::UnexpectedStatusCode(code)) if code == 401 => {
                 warn!("Invalid credentials");
-                return Err(DockerClientError::BadAuthenticationCredentials);
+                Err(DockerClientError::BadAuthenticationCredentials)
             },
 
             Err(other_error) => {
                 warn!("Other client error: {:?}", other_error);
-                return Err(other_error);
+                Err(other_error)
             },
 
             Ok(_) => {
                 info!("Provided credentials are OK");
-                return Ok(())
+                Ok(())
             },
         }
     }

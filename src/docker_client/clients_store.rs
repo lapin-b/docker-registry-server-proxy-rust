@@ -48,13 +48,13 @@ impl DockerClientsStore {
         // Client doesn't exist or needs revalidation. We drop the existing read and will non-atomically upgrade to a write
         // lock on the map.
         let mut map_lock = self.docker_clients_store.write().await;
-        let (registry, container) = split_registry_and_container(&registry_container_key);
+        let (registry, container) = split_registry_and_container(registry_container_key);
         let mut client = DockerClient::new(registry, container, self.http_client.clone());
         client.authenticate(None, None).await?;
         let client = Arc::new(client);
 
         map_lock.insert(registry_container_key.to_string(), Arc::clone(&client));
 
-        return Ok(client);
+        Ok(client)
     }
 }

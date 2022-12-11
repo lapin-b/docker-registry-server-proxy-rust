@@ -122,7 +122,7 @@ impl AuthenticationStrategy for BearerTokenAuthStrategy {
                 .map(|issued| chrono::DateTime::parse_from_rfc3339(&issued).unwrap())
                 .unwrap_or_else(|| Utc::now().into())
                 .into();
-            self.expires_in = token.expires_in.map(|exp| Duration::from_secs(exp)).unwrap_or_else(|| Duration::from_secs(60));
+            self.expires_in = token.expires_in.map(Duration::from_secs).unwrap_or_else(|| Duration::from_secs(60));
             self.token = Some(token.token);
         Ok(())
     }

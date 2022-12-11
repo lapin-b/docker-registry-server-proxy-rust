@@ -78,7 +78,7 @@ pub fn file256sum_async(path: PathBuf) -> tokio::task::JoinHandle<std::io::Resul
 }
 
 pub fn split_registry_and_container(registry_container: &str) -> (&str, &str) {
-    let components = REGISTRY_CONTAINER_SEPARATION_REGEX.captures(&registry_container).unwrap();
+    let components = REGISTRY_CONTAINER_SEPARATION_REGEX.captures(registry_container).unwrap();
 
     let registry = components.name("registry").unwrap().as_str();
     let container = components.name("container").unwrap().as_str();
