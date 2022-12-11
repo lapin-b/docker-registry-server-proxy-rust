@@ -80,7 +80,6 @@ pub async fn fetch_manifest(
 pub async fn proxy_fetch_manifest(
     Path((container_ref, manifest_ref)): Path<(String, String)>,
     State(app): State<ApplicationState>,
-    http_method: http::Method
 ) -> RegistryHttpResult {
     reject_invalid_container_refs(&container_ref)?;
     reject_invalid_tags_refs(&manifest_ref)?;
@@ -102,7 +101,6 @@ pub async fn proxy_fetch_manifest(
 
     // Check if we have the same copy of the manifest somewhere in our files before sending a GET request
     // to the upstream respository.
-
     let proxy_manifest_hash_path = RegistryPathsHelper::manifest_path(&app.conf.proxy_storage, &container_ref, &proxy_manifest_head.hash);
     info!("Check if cached manifest file exists for hash {}", proxy_manifest_head.hash);
 
@@ -122,23 +120,28 @@ pub async fn proxy_fetch_manifest(
             proxy_manifest_file.write_all(&chunk).await?;
         }
 
-        let proxy_manifest_tag_path = RegistryPathsHelper::manifest_path(&app.conf.proxy_storage, &container_ref, &manifest_ref);
-        // If the client requests a particular hash manifest, it will exist since we have already dumped it into its own file
-        // before copying it to the named tag.
-        tokio::fs::copy(&proxy_manifest_hash_path, &proxy_manifest_tag_path).await?;
+        if !manifest_ref.starts_with("sha256") {
+            let proxy_manifest_tag_path = RegistryPathsHelper::manifest_path(&app.conf.proxy_storage, &container_ref, &manifest_ref);
+            // If the client requests a particular hash manifest, it will exist since we have already dumped it into its own file
+            // before copying it to the named tag.
+            tokio::fs::copy(&proxy_manifest_hash_path, &proxy_manifest_tag_path).await?;
+        }
 
         info!("Writing metadata");
         // Create all the files related to metadata saved in the proxy repository
         let proxy_manifest_meta_hash_path = RegistryPathsHelper::manifest_meta(&app.conf.proxy_storage, &container_ref, &proxy_manifest_head.hash);
-        let proxy_manifest_meta_tag_path = RegistryPathsHelper::manifest_meta(&app.conf.proxy_storage, &container_ref, &manifest_ref);
         tokio::fs::create_dir_all(proxy_manifest_meta_hash_path.parent().unwrap()).await?;
-        let manifest_metadata = ManifestMetadata { content_type: &proxy_manifest.content_type, hash: &&proxy_manifest.hash };
+        let manifest_metadata = ManifestMetadata { content_type: &proxy_manifest.content_type, hash: &proxy_manifest.hash };
         let manifest_metadata = serde_json::to_string(&manifest_metadata).unwrap();
         let mut manifest_metadata_file = tokio::fs::File::create(&proxy_manifest_meta_hash_path).await?;
         manifest_metadata_file.write_all(manifest_metadata.as_bytes()).await?;
         manifest_metadata_file.flush().await?;
         drop(manifest_metadata_file);
-        tokio::fs::copy(&proxy_manifest_meta_hash_path, &proxy_manifest_meta_tag_path).await?;
+
+        if !manifest_ref.starts_with("sha256") {
+            let proxy_manifest_meta_tag_path = RegistryPathsHelper::manifest_meta(&app.conf.proxy_storage, &container_ref, &manifest_ref);
+            tokio::fs::copy(&proxy_manifest_meta_hash_path, &proxy_manifest_meta_tag_path).await?;
+        }
     } else {
         // Else ­— if the hash file exists —, we do nothing.
         info!("Hash is already cached")
