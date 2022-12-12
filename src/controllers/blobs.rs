@@ -1,12 +1,12 @@
 use std::{io, os::unix::prelude::MetadataExt};
 
 use axum::{http::{StatusCode, Method}, extract::{Path, State}, response::IntoResponse, body::StreamBody};
-use futures::stream::{self, StreamExt, Stream};
+use futures::stream::{self, StreamExt};
 use tokio::io::AsyncWriteExt;
 use tokio_util::io::ReaderStream;
 use tracing::info;
 
-use crate::{data::helpers::{reject_invalid_container_refs, RegistryPathsHelper, self, reject_invalid_tags_refs, file256sum_async}, ApplicationState, docker_client::client::DockerClientError};
+use crate::{data::helpers::{reject_invalid_container_refs, RegistryPathsHelper, self, reject_invalid_tags_refs}, ApplicationState, docker_client::client::DockerClientError};
 use crate::controllers::RegistryHttpResult;
 
 use super::RegistryHttpError;
@@ -88,7 +88,6 @@ pub async fn proxy_blob(
         info!("Blob is cached, sending cached version");
         let blob_file = tokio::fs::File::open(&blob_path).await?;
         let blob_size = blob_file.metadata().await?.size();
-        let blob_hash = file256sum_async(blob_path.clone()).await??;
 
         let body_stream = StreamBody::from(ReaderStream::new(blob_file));
         return Ok((
@@ -96,7 +95,6 @@ pub async fn proxy_blob(
             [
                 ("Content-Type", "application/octet-stream".to_string()),
                 ("Content-Length", blob_size.to_string()),
-                ("Docker-Content-Digest", format!("sha256:{}", blob_hash)),
                 ("Proxy-Docker-Cache", "HIT".to_string())
             ],
             body_stream
@@ -147,7 +145,6 @@ pub async fn proxy_blob(
                 [
                     ("Content-Type", "application/octet-stream".to_string()),
                     ("Content-Length", response.content_length.to_string()),
-                    //("Docker-Content-Digest", response.hash),
                     ("Proxy-Docker-Cache", "MISS".to_string())
                 ],
                 StreamBody::new(downstream_response_stream)
