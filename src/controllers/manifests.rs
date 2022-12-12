@@ -98,10 +98,6 @@ pub async fn proxy_fetch_manifest(
             let proxy_manifest_hash_path = RegistryPathsHelper::manifest_path(&app.conf.proxy_storage, &container_ref, &proxy_response_head.hash);
             if !proxy_manifest_hash_path.is_file() {
                 info!("File does not exist. Querying and caching the upstream manifest");
-
-                tokio::fs::create_dir_all(&proxy_manifest_hash_path.parent().unwrap()).await?;
-                let proxy_manifest_meta_hash_path = RegistryPathsHelper::manifest_meta(&app.conf.proxy_storage, &container_ref, &proxy_response_head.hash);
-                tokio::fs::create_dir_all(proxy_manifest_meta_hash_path.parent().unwrap()).await?;
                 // We don't have the manifest, GET the manifest referenced by the hash sent by the server
                 // and dump it into a file in our file system, no matter the original client request method.
                 //
@@ -110,12 +106,17 @@ pub async fn proxy_fetch_manifest(
                 //
                 // Instead of bailing out, we could consider sending a stale version of the manifest. Later.
                 let mut proxy_manifest = client.query_manifest(&proxy_response_head.hash, false).await?;
+
+                tokio::fs::create_dir_all(&proxy_manifest_hash_path.parent().unwrap()).await?;
+                let proxy_manifest_meta_hash_path = RegistryPathsHelper::manifest_meta(&app.conf.proxy_storage, &container_ref, &proxy_response_head.hash);
+                tokio::fs::create_dir_all(proxy_manifest_meta_hash_path.parent().unwrap()).await?;
                 let mut manifest_file = Manifest::new(&app.conf.proxy_storage, &app.conf.temporary_registry_storage, &container_ref, &manifest_ref);
 
                 // And write all the things. The function will be in charge of writing the docker image manifest and its
                 // related metadata, while making sure to not do stupid stuff such as overwriting the hash file with an
                 // empty version of itself.
                 manifest_file.save_manifest((&mut proxy_manifest.raw_response).into()).await?;
+                manifest_file.save_manifest_metadata(&proxy_response_head.content_type).await?;
             } else {
                 info!("Manifest is already cached");
             }
