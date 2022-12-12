@@ -82,6 +82,11 @@ pub async fn proxy_blob(
     // have to fetch the upstream to dump the blob in the cache and to the downstream
     // client.
 
+    // Note: the specification requests that a header with the hash is sent. Google with its
+    // container registry doesn't and that caused some errors on the upstream side.
+    // I have tried to proxy the blob without the Docker-Content-Digest header, no problem so
+    // far.
+
     info!("Checking if there is a cached blob");
     let blob_path = RegistryPathsHelper::blob_path(&app.conf.proxy_storage, &container_ref, &digest);
     if blob_path.is_file() {
@@ -108,6 +113,10 @@ pub async fn proxy_blob(
     let docker_client = app.docker_clients.get_client(&container_ref).await?;
     match docker_client.query_blob(&digest).await {
         Ok(response) => {
+            // Since we can't write a file with the existing methods on the streams because
+            // mutables don't mix very well with them, we will need a helper structure that will keep
+            // some state for each chunk of the response. While this could have been a simple tuple,
+            // I'd rather not mix my pens and stumble on myself.
             let stream_helper = FileWritingStreamHelper {
                 file: tokio::fs::File::create(&blob_path).await?,
                 inner_stream: response
@@ -115,27 +124,37 @@ pub async fn proxy_blob(
                     .bytes_stream()
             };
 
+            // The magic that will allow us to write a file and send a response at the same time. Since
+            // axum's StreamBody takes an implementation of stream, we can pass an unfold stream that will wrap
+            // the underlying stream. The effect is like the `tee` command, but on streams.
             let downstream_response_stream = stream::unfold(
                 stream_helper,
                 |mut state| async move {
                     let next_chunk = state.inner_stream.next().await;
 
                     match next_chunk {
+                        // There is a chunk of response to dump into a file and it has been extracted successfully.
                         Some(Ok(chunk)) => {
                             let result = state
                                 .file
                                 .write_all(&chunk)
                                 .await
+                                // We convert a successful write into the chunk so axum can
+                                // write it in the response, and a write error into a registry
+                                // error.
                                 .map(|_| chunk)
                                 .map_err(|e| RegistryHttpError::from(e));
-
                             Some((result, state))
                         }
 
+                        // There is a chunk but the extraction failed. Convert the failure into a registry error and
+                        // return it.
                         Some(Err(error)) => {
                             Some((Err(RegistryHttpError::from(error)), state))
                         }
 
+                        // There's no more chunk to extract, we send None so axum is signaled that the stream
+                        // has been exhausted.
                         None => None
                     }
             });

@@ -2,7 +2,7 @@ use axum::{http::StatusCode, extract::{Path, State, Query, BodyStream}, response
 use serde::Deserialize;
 use tracing::info;
 
-use crate::{data::helpers::{reject_invalid_container_refs}, ApplicationState};
+use crate::{data::helpers::reject_invalid_container_refs, ApplicationState};
 use crate::controllers::RegistryHttpResult;
 
 use super::RegistryHttpError;
@@ -21,6 +21,7 @@ pub async fn initiate_upload(
     reject_invalid_container_refs(&container_ref)?;
 
     if query_string.is_some() {
+        // Monolithic uploads are not implemented
         return Ok((StatusCode::NOT_IMPLEMENTED).into_response());
     }
 
@@ -57,7 +58,6 @@ pub async fn delete_upload(
 
     let upload = upload_lock.read().await;
 
-    // Check container ref then remove
     upload.cleanup_upload().await?;
     app.uploads.delete_upload(upload.id).await;
 
