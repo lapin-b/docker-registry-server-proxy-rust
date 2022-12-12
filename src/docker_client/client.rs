@@ -7,6 +7,13 @@ use crate::docker_client::{www_authenticate::AuthenticationChallenge, authentica
 
 use super::{www_authenticate::WwwAuthenticateError, authentication_strategies::AuthenticationStrategy, client_responses::ProxyBlobResponse};
 
+const SUPPORTED_MIMETYPES: &[&'static str] = &[
+    "application/vnd.docker.distribution.manifest.v2+json",
+    "application/vnd.docker.distribution.manifest.list.v2+json",
+    "application/vnd.docker.image.rootfs.diff.tar.gzip",
+    "application/vnd.docker.image.rootfs.foreign.diff.tar.gzip"
+];
+
 #[derive(thiserror::Error, Debug)]
 pub enum DockerClientError {
     #[error("Unexpected status code {0}")]
@@ -126,15 +133,19 @@ impl DockerClient {
         Ok(())
     }
 
+    #[tracing::instrument(skip_all, fields(manifest_ref = manifest_ref, head = query_head))]
     pub async fn query_manifest(&self, manifest_ref: &str, query_head: bool) -> Result<ProxyManifestResponse, DockerClientError> {
-        let response = self.create_request(
-            if query_head { Method::HEAD } else { Method::GET },
-            format!("https://{}/v2/{}/manifests/{}",
-                self.registry,
-                self.container,
-                manifest_ref
-            )
-        )?.send().await?;
+        let url = format!("https://{}/v2/{}/manifests/{}",
+            self.registry,
+            self.container,
+            manifest_ref
+        );
+
+        let method = if query_head { Method::HEAD } else { Method::GET };
+        debug!("Sending {} to {}", method, url);
+        let response = self.create_request(method, url)?.send().await?;
+        debug!("Got response {}", response.status());
+        debug!("Got headers: {:#?}", response.headers());
 
         if response.status() != 200 {
             return Err(DockerClientError::UnexpectedStatusCode(response.status().as_u16()))
@@ -174,6 +185,7 @@ impl DockerClient {
             return Err(DockerClientError::UnexpectedStatusCode(response.status().as_u16()));
         }
 
+        debug!("Got response: {}", response.status());
         debug!("Returned headers: {:#?}", response.headers());
 
         Ok(ProxyBlobResponse {
@@ -203,7 +215,11 @@ impl DockerClient {
 
     fn create_request(&self, method: reqwest::Method, url: impl IntoUrl) -> Result<reqwest::RequestBuilder, DockerClientError> {
         let builder = self.http_client.request(method, url);
-        Ok(self.auth_strat.as_ref().ok_or(DockerClientError::UninitiatedAuthentication)?.inject_authentication(builder))
+        let builder = self.auth_strat.as_ref().ok_or(DockerClientError::UninitiatedAuthentication)?.inject_authentication(builder);
+        Ok(
+            builder.
+                header("Accept", SUPPORTED_MIMETYPES.join(","))
+        )
     }
 
     fn add_authentication(&self, request: RequestBuilder) -> RequestBuilder {
