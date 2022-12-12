@@ -10,7 +10,7 @@ use crate::controllers::RegistryHttpError;
 static REGISTRY_CONTAINER_SEPARATION_REGEX: Lazy<Regex> = Lazy::new(|| {
     // The registry part is mandatory, I don't want to deal with "rust:latest"
     // aliasing to "registry.docker.io/library/rust:latest"
-    Regex::new("(?P<registry>[a-zA-z.]+(?::[0-9]{1,6})?)/(?P<container>[a-zA-Z0-9-./]+)$").unwrap()
+    Regex::new("(?P<registry>[a-zA-Z0-9-.]+(?::[0-9]{1,6})?)/(?P<container>[a-zA-Z0-9-./]+)$").unwrap()
 });
 
 pub struct RegistryPathsHelper;
