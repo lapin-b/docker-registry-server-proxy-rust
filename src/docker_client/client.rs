@@ -1,11 +1,11 @@
 use std::str::FromStr;
 
 use reqwest::{RequestBuilder, IntoUrl, Method};
-use tracing::{info, warn};
+use tracing::{info, warn, debug};
 
 use crate::docker_client::{www_authenticate::AuthenticationChallenge, authentication_strategies::{AnonymousAuthStrategy, HttpBasicAuthStrategy, BearerTokenAuthStrategy}, client_responses::ProxyManifestResponse};
 
-use super::{www_authenticate::WwwAuthenticateError, authentication_strategies::AuthenticationStrategy};
+use super::{www_authenticate::WwwAuthenticateError, authentication_strategies::AuthenticationStrategy, client_responses::ProxyBlobResponse};
 
 #[derive(thiserror::Error, Debug)]
 pub enum DockerClientError {
@@ -153,6 +153,36 @@ impl DockerClient {
                 .to_str()
                 .expect("Invalid UTF-8 in header content")
                 .to_string(),
+            content_length: response.headers()
+                .get("Content-Length")
+                .ok_or(DockerClientError::MissingProxyHeader("Content-Length".to_string()))?
+                .to_str()
+                .expect("Invalid UTF-8 in header content")
+                .parse()
+                .expect("Content length is not a number"),
+            raw_response: response,
+        })
+    }
+
+    pub async fn query_blob(&self, blob_hash: &str) -> Result<ProxyBlobResponse, DockerClientError> {
+        let response = self.create_request(
+            Method::GET, 
+            format!("https://{}/v2/{}/blobs/{}", self.registry, self.container, blob_hash)
+        )?.send().await?;
+
+        if response.status() != 200 {
+            return Err(DockerClientError::UnexpectedStatusCode(response.status().as_u16()));
+        }
+
+        debug!("Returned headers: {:#?}", response.headers());
+
+        Ok(ProxyBlobResponse {
+            hash: response.headers()
+                .get("Docker-Content-Digest")
+                .map(|value| value
+                    .to_str()
+                    .expect("Invalid UTF-8 in header content").to_string()
+                ),
             content_length: response.headers()
                 .get("Content-Length")
                 .ok_or(DockerClientError::MissingProxyHeader("Content-Length".to_string()))?

@@ -87,7 +87,7 @@ pub async fn proxy_fetch_manifest(
     // TODO: Rearrange code to support offline proxying, that is if the upstream proxy did send 429 or any 5xx HTTP code
     let client = app.docker_clients.get_client(&container_ref).await?;
     info!("Querying upstream HEAD to fetch the most manifest related to the tag");
-    
+
     let (proxy_hash, content_length, content_type) = match client.query_manifest(&manifest_ref, true).await {
         // The ideal case: the server returns a 200 on the HEAD HTTP request
         Ok(proxy_response_head) => {

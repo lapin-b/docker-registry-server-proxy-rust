@@ -81,6 +81,10 @@ async fn main() -> eyre::Result<()> {
             "/v2/proxy/:container_ref/manifests/:reference",
             get(controllers::manifests::proxy_fetch_manifest)
         )
+        .route(
+            "/v2/proxy/:container_ref/blobs/:digest",
+            get(controllers::blobs::proxy_blob)
+        )
         .with_state(application_state)
         .layer(TraceLayer::new_for_http());
 
