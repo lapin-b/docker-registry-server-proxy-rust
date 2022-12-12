@@ -3,7 +3,7 @@ use std::{time::Duration, collections::HashMap};
 use async_trait::async_trait;
 use chrono::Utc;
 use serde::Deserialize;
-use tracing::{info, error};
+use tracing::{info, error, debug};
 
 use super::client::DockerClientError;
 
@@ -88,6 +88,7 @@ impl AuthenticationStrategy for BearerTokenAuthStrategy {
         authentication_parameters.insert("scope", &self.scope);
 
         let authentication_service = authentication_parameters.get("realm").expect("Who am I supposed to authenticate to ?");
+        debug!("Querying token auth service {} with parameters {:#?}", authentication_service, authentication_parameters);
         let authentication_query_string = authentication_parameters.iter()
             .filter(|(key, _)| **key != "realm")
             .map(|(k, v)| [*k, *v].join("="))
