@@ -14,6 +14,13 @@ While installing the registry was a breeze, I can't make it work as a pull-throu
 
 Implementing the entire [Docker Registry HTTP API V2 specification](https://docs.docker.com/registry/spec/api/) is a non-goal. As long as I can push and pull images with the `docker` client, I will be fine. If I find tooling that needs [monolithic blob uploads](https://docs.docker.com/registry/spec/api/#post-initiate-blob-upload), I will maybe look into implementing that. Same goes for other URIs in the specification.
 
+## Current limitations
+In the current state of the code (2022-12-13, commit `afb86448`), there are a few limitations. Some can be compensated, others not quite.
+
+1. No HTTP authentication. You must set up a reverse proxy for that, although changes are you already have one.
+2. Docker registry connection information — e.g. tokens to access the DockerHub anonymously — aren't cleaned when the token expires. They are recreated when the proxy needs to hit the upstream registry and the token has expired.
+3. Garbage collecting the proxy container registry has not been developed yet.
+
 ## Configuration sample
 
 A file named `configuration.toml` in the server's working directory will suffice. The file should contain the following keys, otherwise it won't start:
