@@ -77,7 +77,7 @@ pub async fn process_blob_chunk_upload(
         .await?
         .ok_or_else(|| RegistryHttpError::upload_id_not_found(&raw_upload_uuid))?;
 
-    let upload = upload_lock.read().await;
+    let mut upload = upload_lock.write().await;
     let seek_position = upload.write_blob(&mut layer).await?;
 
     Ok((
@@ -109,7 +109,7 @@ pub async fn finalize_blob_upload(
         .await?
         .ok_or_else(|| RegistryHttpError::upload_id_not_found(&raw_upload_uuid))?;
 
-    let upload = upload_lock.read().await;
+    let mut upload = upload_lock.write().await;
     upload.write_blob(&mut layer).await?;
     upload.finalize_upload(hash).await?;
 

@@ -1,10 +1,13 @@
 use std::{collections::HashMap, path::{PathBuf, Path}, time::Instant, sync::Arc};
+use std::time::Duration;
 
 use axum::extract::BodyStream;
 use futures_util::StreamExt;
 use tokio::{sync::RwLock, io::AsyncWriteExt};
 use tokio::io::AsyncSeekExt;
+use tracing::{info, warn};
 use uuid::Uuid;
+use crate::UPLOAD_PRUNE_AGE;
 
 use super::helpers::RegistryPathsHelper;
 
@@ -44,7 +47,7 @@ impl Upload {
         tokio::fs::create_dir_all(parent).await
     }
 
-    pub async fn write_blob(&self, layer: &mut BodyStream) -> eyre::Result<u64> {
+    pub async fn write_blob(&mut self, layer: &mut BodyStream) -> eyre::Result<u64> {
         let mut file = if self.temporary_file_path.is_file() {
             tokio::fs::File::open(&self.temporary_file_path).await?
         } else {
@@ -56,6 +59,9 @@ impl Upload {
         while let Some(chunk) = layer.next().await {
             let chunk = chunk?;
             file.write_all(&chunk).await?;
+            // Make sure we update the last interaction so this upload won't get cleaned up by
+            // the uploads pruning of the store.
+            self.update_last_interacted();
         }
 
         let position = file.seek(std::io::SeekFrom::End(0)).await?;
@@ -136,6 +142,26 @@ impl UploadsStore {
         let uuid = upload.parse()?;
         self.delete_upload(uuid).await;
         Ok(())
+    }
+
+    pub async fn prune(&self) {
+        let mut lock = self.inner.write().await;
+        let mut prune_uuids = Vec::new();
+        for (key, upload) in lock.iter() {
+            let upload = upload.write().await;
+            if upload.last_interacted_with.elapsed() > Duration::from_secs(UPLOAD_PRUNE_AGE) {
+                info!("Deleting upload {}", key);
+                if let Err(delete_error) = upload.cleanup_upload().await {
+                    warn!("Error while deleting upload file for {}: {:?}", key, delete_error);
+                }
+
+                prune_uuids.push(*key);
+            }
+        }
+
+        for uuid_to_prune in prune_uuids {
+            lock.remove(&uuid_to_prune);
+        }
     }
 }
 

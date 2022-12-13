@@ -26,6 +26,9 @@ use crate::data::uploads::UploadsStore;
 
 pub type UploadsInProgressState = Arc<RwLock<UploadsStore>>;
 
+static UPLOAD_PRUNE_INTERVAL: u64 = 60;
+static UPLOAD_PRUNE_AGE: u64 = 180;
+
 #[derive(FromRef, Clone)]
 pub struct ApplicationState {
     conf: Arc<Configuration>,
@@ -35,6 +38,7 @@ pub struct ApplicationState {
 
 #[tokio::main]
 async fn main() -> eyre::Result<()> {
+    // Logging setup
     tracing_subscriber::registry()
         .with(
             tracing_subscriber::EnvFilter::try_from_default_env()
@@ -43,6 +47,7 @@ async fn main() -> eyre::Result<()> {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
+    // Configuration and registry directories setup
     info!("Loading configuration");
     let configuration = toml::from_str::<Configuration>(&tokio::fs::read_to_string("configuration.toml").await?)?;
 
@@ -51,12 +56,24 @@ async fn main() -> eyre::Result<()> {
     tokio::fs::create_dir_all(&configuration.temporary_registry_storage).await?;
     tokio::fs::create_dir_all(&configuration.proxy_storage).await?;
 
+    // Application state setup
     let application_state = ApplicationState {
         conf: Arc::new(configuration),
         docker_clients: DockerClientsStore::new(),
         uploads: UploadsStore::new()
     };
 
+    let uploads_cleanup_task = {
+        let uploads_app_state = application_state.clone();
+        tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(Duration::from_secs(UPLOAD_PRUNE_INTERVAL)).await;
+                uploads_app_state.uploads.prune().await;
+            }
+        })
+    };
+
+    // HTTP server setup
     let app = Router::new()
         .route("/", get(controllers::base::root))
         .route("/v2/", get(controllers::base::registry_base))
