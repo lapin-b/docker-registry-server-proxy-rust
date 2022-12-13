@@ -7,15 +7,18 @@ mod docker_client;
 use std::net::SocketAddr;
 use std::str::FromStr;
 use std::sync::Arc;
+use std::time::Duration;
 use axum::Router;
 use axum::extract::FromRef;
 use axum::routing::{get, post, patch};
 use axum::ServiceExt;
 use docker_client::clients_store::DockerClientsStore;
+use tokio::signal::unix::signal;
+use tokio::signal::unix::SignalKind;
 use tokio::sync::RwLock;
 use tower::Layer;
 use tower_http::trace::TraceLayer;
-use tracing::info;
+use tracing::{info, warn};
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use crate::configuration::Configuration;
@@ -91,12 +94,36 @@ async fn main() -> eyre::Result<()> {
     let url_rewrite_layer = axum::middleware::from_fn(requests::rewrite_container_part_url);
     let app_with_rewrite = url_rewrite_layer.layer(app);
 
-    let addr = SocketAddr::from_str("0.0.0.0:8000").unwrap();
-    println!("Listen port 8000");
-    axum::Server::bind(&addr)
-        .serve(app_with_rewrite.into_make_service())
-        .await?;
+    // Http server and termination setup handling
+    let (server_termination_tx, server_termination_rx) = tokio::sync::oneshot::channel::<()>();
+
+    let http_server = tokio::spawn(async {
+        let address = SocketAddr::from_str("0.0.0.0:8000").unwrap();
+        warn!("Listening on port 8000");
+        axum::Server::bind(&address)
+            .serve(app_with_rewrite.into_make_service())
+            .with_graceful_shutdown(async {
+                server_termination_rx.await.ok();
+                info!("HTTP server received termination");
+            }).await.unwrap();
+    });
+
+    server_shutdown_signal().await;
+
+    server_termination_tx.send(()).unwrap();
+    http_server.await.unwrap();
+    uploads_cleanup_task.abort();
 
     Ok(())
 }
 
+async fn server_shutdown_signal() {
+    // Graceful termination setup
+    let mut interrupt_signal = signal(SignalKind::interrupt()).unwrap();
+    let mut terminate_signal = signal(SignalKind::terminate()).unwrap();
+
+    tokio::select! {
+        _ = interrupt_signal.recv() => warn!("Received SIGINT"),
+        _ = terminate_signal.recv() => warn!("Received SIGTERM"),
+    };
+}
