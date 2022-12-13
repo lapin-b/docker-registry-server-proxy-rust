@@ -8,7 +8,7 @@ This project aims to implement a [Docker Registry HTTP API](https://docs.docker.
 
 ## Why not [Docker's Go implementation](https://github.com/distribution/distribution/) of the registry ?
 
-While installing the registry was a breeze, I can't make it work as a pull-through registry and a storage registry **at the same time**. It's either one, or the other. While I could setup another registry (pretty much automated with Ansible), that would mean grabbing another TLS certificate, setting up another subdomain and configure the HTTP reverse proxy appropriately. Let alone configuring the HTTP reverse-proxy to use only one domain.
+While installing the registry was a breeze, I can't make it work as a pull-through registry and a storage registry **at the same time**. It's either one, or the other. While I could set up another registry (pretty much automated with Ansible), that would mean grabbing another TLS certificate, setting up another subdomain and configure the HTTP reverse proxy appropriately. Let alone configuring the HTTP reverse-proxy to use only one domain.
 
 ## Non-goals
 
@@ -17,7 +17,7 @@ Implementing the entire [Docker Registry HTTP API V2 specification](https://docs
 ## Current limitations
 In the current state of the code (2022-12-13, commit `afb86448`), there are a few limitations. Some can be compensated, others not quite.
 
-1. No HTTP authentication. You must set up a reverse proxy for that, although changes are you already have one.
+1. No HTTP authentication. You must set up a reverse proxy for that, although chances are you already have one.
 2. Docker registry connection information — e.g. tokens to access the DockerHub anonymously — aren't cleaned when the token expires. They are recreated when the proxy needs to hit the upstream registry and the token has expired.
 3. Garbage collecting the proxy container registry has not been developed yet.
 
@@ -34,7 +34,7 @@ proxy_storage = "storage/proxy"
 ## A few words on the container proxy
 If proxying containers, you **must** give the registry the **whole** path to reach the container, especially for containers from the DockerHub. Otherwise, you may end up with issues regarding DNS not resolving addresses.
 
-For example, if you want to reference `hello-world:latest` from the DockerHub, you must reference it with `registry-1.docker.io/library/hello-world:latest`. The whole URL will look like `<your registry>/proxy/registry-1.docker.io/library/hello-world:latest`. It's longwinded, but in the interest of keeping things simple with regular expressions, this will do. Containers from other registries are not affected since you must refer to them by the whole path anyway.
+For example, if you want to reference `hello-world:latest` from the DockerHub, you must reference it with `registry-1.docker.io/library/hello-world:latest`. The whole URL will look like `<your registry>/proxy/registry-1.docker.io/library/hello-world:latest`. It's long-winded, but in the interest of keeping things simple with regular expressions, this will do. Containers from other registries are not affected since you must refer to them by the whole path anyway.
 
 ## License
 Copyright 2022 Mathias B. <contact@l4p1n.ch>
